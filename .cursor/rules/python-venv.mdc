@@ -1,0 +1,21 @@
+---
+description: Use the project .venv Python interpreter for CLI and tooling.
+alwaysApply: true
+---
+
+# Python 解释器（虚拟环境）
+
+本仓库在根目录使用 **`.venv`**。运行 Python、安装依赖、或调用 `python -m …` 时，应使用该项目虚拟环境中的解释器，而不是系统全局的 `python` / `python3`。
+
+- **Linux / macOS**：`.venv/bin/python`
+- **Windows**：`.venv\Scripts\python.exe`
+
+示例（在项目根目录执行）：
+
+```bash
+.venv/bin/python -m pytest
+.venv/bin/python -m pip install -e ".[dev]"
+.venv/bin/python -m ruff check .
+```
+
+若某工具尚未安装在 `.venv` 中，应安装到该环境内，避免混用全局解释器。

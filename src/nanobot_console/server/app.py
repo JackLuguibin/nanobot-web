@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import Any
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -15,8 +16,66 @@ from nanobot_console.server.config import ServerSettings, get_settings
 from nanobot_console.server.models import ErrorDetail, ErrorResponse
 from nanobot_console.server.routers import health
 
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+_ERR_VALIDATION_CODE = "VALIDATION_ERROR"
+_ERR_VALIDATION_MSG = "Request validation failed"
+_ERR_INTERNAL_CODE = "INTERNAL_ERROR"
+_ERR_INTERNAL_MSG = "An unexpected error occurred"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Log startup and shutdown; bind/version come from settings."""
+    settings: ServerSettings = app.state.settings
+    logger.info(
+        "Starting nanobot-console server {version} — listening on {host}:{port}",
+        version=settings.version,
+        host=settings.host,
+        port=settings.port,
+    )
+    yield
+    logger.info("Shutting down nanobot-console server")
+
+
+def _error_json(
+    status_code: int,
+    *,
+    code: str,
+    message: str,
+    detail: dict[str, Any] | None = None,
+) -> JSONResponse:
+    """Serialize the standard error envelope to JSON."""
+    return JSONResponse(
+        status_code=status_code,
+        content=ErrorResponse(
+            error=ErrorDetail(code=code, message=message, detail=detail)
+        ).model_dump(mode="json"),
+    )
+
+
+async def validation_exception_handler(
+    _request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    """422 for request body / parameter validation failures."""
+    return _error_json(
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        code=_ERR_VALIDATION_CODE,
+        message=_ERR_VALIDATION_MSG,
+        detail={"errors": exc.errors()},
+    )
+
+
+async def unhandled_exception_handler(
+    _request: Request,
+    _exc: Exception,
+) -> JSONResponse:
+    """500 for uncaught exceptions."""
+    logger.exception("Unhandled exception")
+    return _error_json(
+        status.HTTP_500_INTERNAL_SERVER_ERROR,
+        code=_ERR_INTERNAL_CODE,
+        message=_ERR_INTERNAL_MSG,
+    )
 
 
 def create_app(settings: ServerSettings | None = None) -> FastAPI:
@@ -27,35 +86,23 @@ def create_app(settings: ServerSettings | None = None) -> FastAPI:
             singleton from ``get_settings()`` is used.
 
     Returns:
-        A ready-to-mount FastAPI app. Call ``run_app()`` or pass it to
-        a ASGI server such as uvicorn / hypercorn.
+        A ready-to-mount FastAPI app. Pass it to an ASGI server such as
+        uvicorn (see ``nanobot_console.cli.main``) or hypercorn.
     """
     if settings is None:
         settings = get_settings()
-
-    @asynccontextmanager
-    async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
-        logger.info(
-            "Starting nanobot-console server {} — listening on {}:{}",
-            settings.version,
-            settings.host,
-            settings.port,
-        )
-        yield
-        logger.info("Shutting down nanobot-console server")
 
     app = FastAPI(
         title=settings.title,
         description=settings.description,
         version=settings.version,
         lifespan=lifespan,
-        docs_url=None if settings.reload else settings.docs_url,
-        redoc_url=settings.redoc_url,
-        openapi_url=settings.openapi_url,
-        # Suppress default docs in production when reload is off
+        docs_url=settings.effective_docs_url,
+        redoc_url=settings.effective_redoc_url,
+        openapi_url=settings.effective_openapi_url,
     )
+    app.state.settings = settings
 
-    # CORS — must be registered before any routes
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -64,42 +111,11 @@ def create_app(settings: ServerSettings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Mount versioned API routes
     app.include_router(health.router, prefix=settings.api_prefix)
 
-    # Global exception handlers ------------------------------------------------
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(Exception, unhandled_exception_handler)
 
-    @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(
-        _request: Request, exc: RequestValidationError
-    ) -> JSONResponse:
-        return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            content=ErrorResponse(
-                error=ErrorDetail(
-                    code="VALIDATION_ERROR",
-                    message="Request validation failed",
-                    detail={"errors": exc.errors()},
-                )
-            ).model_dump(mode="json"),
-        )
-
-    @app.exception_handler(Exception)
-    async def unhandled_exception_handler(
-        _request: Request, exc: Exception
-    ) -> JSONResponse:
-        logger.exception("Unhandled exception: {}", exc)
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content=ErrorResponse(
-                error=ErrorDetail(
-                    code="INTERNAL_ERROR",
-                    message="An unexpected error occurred",
-                )
-            ).model_dump(mode="json"),
-        )
-
-    # Root path (useful for health checks behind reverse proxies)
     @app.get("/", include_in_schema=False)
     async def root() -> dict[str, str]:
         return {"service": settings.title, "version": settings.version}

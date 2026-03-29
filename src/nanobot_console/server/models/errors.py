@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import Field
 
-from nanobot_console.server.models import BaseResponse
+from nanobot_console.server.models.base import BaseResponse
 
 
 class ErrorDetail(BaseResponse):

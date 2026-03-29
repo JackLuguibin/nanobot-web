@@ -1,30 +1,38 @@
 """Health-check and test endpoints."""
 
-from fastapi import APIRouter, status
+from __future__ import annotations
 
-from nanobot_console.server.config import get_settings
-from nanobot_console.server.models import DataResponse, EchoRequest, EchoResponse
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, status
+
+from nanobot_console.server.config import ServerSettings
+from nanobot_console.server.dependencies import get_settings_dep
+from nanobot_console.server.models import (
+    DataResponse,
+    EchoRequest,
+    EchoResponse,
+    HealthResponse,
+)
 
 router = APIRouter(tags=["Health"])
 
 
 @router.get(
     "/health",
-    response_model=DataResponse[dict],
+    response_model=DataResponse[HealthResponse],
     status_code=status.HTTP_200_OK,
     summary="Liveness probe",
 )
-async def health_check() -> DataResponse[dict]:
+async def health_check(
+    settings: Annotated[ServerSettings, Depends(get_settings_dep)],
+) -> DataResponse[HealthResponse]:
     """Return server health status.
 
     Ready for integration with orchestration systems (Kubernetes, etc.).
     """
-    settings = get_settings()
     return DataResponse(
-        data={
-            "status": "ok",
-            "version": settings.version,
-        }
+        data=HealthResponse(version=settings.version),
     )
 
 
