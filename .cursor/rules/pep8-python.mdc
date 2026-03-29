@@ -1,0 +1,127 @@
+---
+description: Strict PEP8 Python coding standards and import sorting rules
+alwaysApply: true
+---
+
+# PEP 8 Python Coding Standards
+
+All Python code in this project must strictly follow [PEP 8](https://pep8.org/) and use tools to enforce import ordering.
+
+## Line Length
+
+- Maximum line length: **88 characters** (Black formatter default).
+- All lines must wrap at or before 88 characters.
+- Never disable line-length checks with `# noqa: E501`.
+
+## Whitespace
+
+- No trailing whitespace on any line.
+- Exactly **two blank lines** between top-level definitions (functions, classes).
+- Exactly **one blank line** between method definitions inside a class.
+- Use spaces around binary operators: `x = 1 + 2`, not `x=1+2`.
+- No spaces inside parentheses, brackets, or braces: `func(a, b)`, not `func( a, b )`.
+- No space before a comma or colon: `{"a": 1}`, not `{ "a": 1 }`.
+- Exactly one space after `#` in inline comments; no space before `#` in inline comments.
+
+## Naming Conventions
+
+| Type | Convention | Example |
+|------|-----------|---------|
+| Modules | lowercase, short, no underscores | `utils`, `http_client` |
+| Classes | CapWords | `HealthCheck`, `ApiError` |
+| Functions | lowercase_with_underscores | `get_health`, `load_config` |
+| Variables | lowercase_with_underscores | `user_data`, `total_count` |
+| Constants | UPPERCASE_WITH_UNDERSCORES | `MAX_RETRIES`, `DEFAULT_TIMEOUT` |
+| Non-public | leading underscore | `_internal_state` |
+
+- Never use single-letter variable names except in: loop counters (`i`, `j`), comprehensions (`x`, `y`), or lambda parameters.
+- Never use `l`, `O`, or `I` as single-character identifiers.
+
+## Imports
+
+**Every import line must be sorted with `isort --profile black`.**
+
+Order groups (each separated by a blank line, in this exact sequence):
+
+1. `__future__` imports
+2. Standard library imports
+3. Third-party imports (e.g., `fastapi`, `pydantic`, `pytest`)
+4. Local application imports (relative imports starting with `.`)
+
+Within each group, imports must be sorted **alphabetically**, case-insensitive, with natural sorting for numbers:
+
+```python
+# ✅ CORRECT
+import os
+import sys
+from __future__ import annotations
+
+import pytest
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+
+from . import config
+from .models import HealthResponse
+from .routers import health
+```
+
+```python
+# ❌ WRONG — wrong order, unsorted
+from fastapi import APIRouter
+import os
+from .models import HealthResponse
+from pydantic import BaseModel
+import pytest
+```
+
+- Use absolute imports over relative imports where both are valid.
+- Never use wildcard imports: `from module import *`.
+- Each import statement should import only one top-level module (do not collapse `import os, sys`).
+- Always use `from x import y` for submodules: `from fastapi import FastAPI` is fine; `import fastapi` then `fastapi.FastAPI` is discouraged.
+
+## Type Annotations
+
+- Use `from __future__ import annotations` to enable postponed evaluation (PEP 563).
+- All function parameters and return values should have type hints.
+- Use `X | None` over `Optional[X]`.
+- Never use `type()` for type checking — use `isinstance()`.
+
+## Control Flow
+
+- Use `if x is None:` or `if x is not None:`, never `if x == None:`.
+- Use `if x in sequence:` for membership checks, never `if sequence.count(x) > 0`.
+- Never compare boolean to `True`/`False` with `==`: use `if flag:` or `if not flag:`.
+- Always use `async def` for async handlers; never mix sync and async in the same handler chain.
+- Always `await` coroutines; never call async functions without `await`.
+
+## Docstrings
+
+- All public modules, classes, and functions must have a docstring.
+- Use triple double quotes `"""doc"""`, not single quotes.
+- One-line docstrings on the same line as the `def`/`class` declaration if they fit on one line; otherwise multi-line:
+
+```python
+def get_health() -> HealthResponse:
+    """Return the current health status of the service."""
+    ...
+```
+
+## Error Handling
+
+- Never use bare `except:` — always specify exception types: `except ValueError:`.
+- Use `raise ... from ...` to chain exceptions with cause.
+- Log errors before re-raising, never swallow silently without logging.
+
+## Code Quality
+
+- No commented-out code; delete it instead.
+- No `TODO` comments without a tracking issue reference: `# TODO(issue-N): ...`.
+- No `pass` in blocks that can be simplified; replace empty `except:` blocks with the appropriate body.
+- Keep functions small — target under 40 lines; refactor anything over 80 lines.
+
+## Enforcement
+
+Before finalizing any Python code changes:
+1. Run `isort --profile black --line-length 88 --check-only` to verify import ordering.
+2. Run `ruff check` (with rules E, F, W) to catch PEP 8 violations and unused imports.
+3. Fix all reported issues before completing the task.
