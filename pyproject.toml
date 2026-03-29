@@ -27,7 +27,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = []
+dev = [
+    "honcho>=2.0",
+]
 
 [project.urls]
 Homepage = ""
@@ -49,12 +51,14 @@ ws = "nanobot_ext.channels.ws:WebSocketChannel"
 
 [project.scripts]
 server = "nanobot_console.cli:main"
+nanobot-dev = "nanobot_console.dev:main"
 
 [tool.hatch.build.targets.sdist]
 include = [
     "/src",
     "/README.md",
     "/LICENSE",
+    "/Procfile",
 ]
 
 [tool.pytest.ini_options]
