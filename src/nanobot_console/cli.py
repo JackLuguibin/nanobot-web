@@ -1,6 +1,11 @@
-"""CLI entry point for the nanobot-console server."""
+"""CLI for nanobot-console: backend server and web UI (dev / build)."""
 
 from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+from pathlib import Path
 
 import uvicorn
 
@@ -8,7 +13,35 @@ from nanobot_console.server.app import create_app
 from nanobot_console.server.config import get_settings
 
 
-def main() -> None:
+def _web_root() -> Path:
+    """Return the path to the ``web`` frontend directory."""
+    return Path(__file__).resolve().parent / "web"
+
+
+def _web_dir_or_exit() -> Path:
+    """Return the web directory, or exit if ``package.json`` is missing."""
+    web_dir = _web_root()
+    pkg = web_dir / "package.json"
+    if not pkg.is_file():
+        raise SystemExit(
+            f"Missing package.json at {web_dir}; "
+            "run npm install in that directory first."
+        )
+    return web_dir
+
+
+def _run_npm_web(npm_script: str) -> None:
+    """Run ``npm run <script>`` in the bundled ``web`` directory."""
+    web_dir = _web_dir_or_exit()
+    result = subprocess.run(
+        ["npm", "run", npm_script],
+        cwd=str(web_dir),
+        check=False,
+    )
+    sys.exit(result.returncode)
+
+
+def _run_server() -> None:
     """Run the FastAPI server via uvicorn."""
     settings = get_settings()
     app = create_app(settings)
@@ -20,6 +53,39 @@ def main() -> None:
         workers=settings.effective_workers,
         log_level=settings.log_level.lower(),
     )
+
+
+def main() -> None:
+    """Parse CLI arguments and dispatch to subcommands."""
+    parser = argparse.ArgumentParser(
+        description="Nanobot console: API server and web UI.",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    subparsers.add_parser("server", help="Run the FastAPI backend (uvicorn).")
+
+    web_parser = subparsers.add_parser(
+        "web",
+        help="Frontend: Vite dev server or production build.",
+    )
+    web_sub = web_parser.add_subparsers(dest="web_action", required=True)
+    web_sub.add_parser(
+        "dev",
+        help="Development: start Vite with HMR (npm run dev).",
+    )
+    web_sub.add_parser(
+        "build",
+        help="Production: typecheck and bundle assets (npm run build).",
+    )
+
+    args = parser.parse_args()
+    if args.command == "server":
+        _run_server()
+    elif args.command == "web":
+        _run_npm_web(args.web_action)
+    else:
+        parser.print_help()
+        sys.exit(1)
 
 
 if __name__ == "__main__":

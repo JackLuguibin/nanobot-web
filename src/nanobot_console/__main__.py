@@ -1,4 +1,6 @@
-"""Allow ``python -m nanobot_console`` to start the server."""
+"""Allow running as ``python -m nanobot_console``."""
+
+from __future__ import annotations
 
 from nanobot_console.cli import main
 

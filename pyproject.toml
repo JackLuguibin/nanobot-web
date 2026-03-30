@@ -45,7 +45,7 @@ packages = ["src/nanobot_ext", "src/nanobot_console"]
 ws = "nanobot_ext.channels.ws:WebSocketChannel"
 
 [project.scripts]
-server = "nanobot_console.cli:main"
+nanobot_console = "nanobot_console.cli:main"
 
 [tool.hatch.build.targets.sdist]
 include = [
