@@ -14,7 +14,7 @@ alwaysApply: true
 
 ```bash
 .venv/bin/python -m pytest
-.venv/bin/python -m pip install -e ".[dev]"
+.venv/bin/python -m pip install -e .
 .venv/bin/python -m ruff check .
 ```
 

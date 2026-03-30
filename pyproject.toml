@@ -26,11 +26,6 @@ dependencies = [
     "pydantic-settings>=2.0",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "honcho>=2.0",
-]
-
 [project.urls]
 Homepage = ""
 Documentation = ""
@@ -51,7 +46,6 @@ ws = "nanobot_ext.channels.ws:WebSocketChannel"
 
 [project.scripts]
 server = "nanobot_console.cli:main"
-nanobot-dev = "nanobot_console.dev:main"
 
 [tool.hatch.build.targets.sdist]
 include = [

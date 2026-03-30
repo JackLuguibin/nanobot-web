@@ -65,7 +65,7 @@ Ping/pong is also supported:
 ## Development
 
 ```bash
-pip install -e ".[dev]"
+pip install -e .
 ```
 
 ### Linting
