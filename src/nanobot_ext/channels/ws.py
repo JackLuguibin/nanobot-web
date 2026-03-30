@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any, Literal
+from urllib.parse import unquote
 
 import websockets
 from loguru import logger
@@ -17,6 +18,7 @@ from nanobot.bus.queue import MessageBus
 from nanobot.channels.base import BaseChannel
 from nanobot.config.schema import Base
 from pydantic import Field
+from websockets.asyncio.server import ServerConnection
 
 
 class WebSocketConfig(Base):
@@ -36,6 +38,7 @@ class InboundPayload(Base):
     type: Literal["message", "ping"] = Field(default="message")
     content: str = Field(default="")
     sender_id: str | None = Field(default=None)
+    session_key: str | None = Field(default=None)
     media: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -66,8 +69,34 @@ class WebSocketChannel(BaseChannel):
         self.config: WebSocketConfig = config
         self._server_task: asyncio.Task | None = None
         self._running = False
-        self._connections: dict[str, websockets.WebSocketServerProtocol] = {}
+        self._connections: dict[str, ServerConnection] = {}
         self._lock = asyncio.Lock()
+
+    @staticmethod
+    def _lookup_keys_for_chat_id(chat_id: str) -> list[str]:
+        """Possible dict keys for the same logical chat (path vs outbound id)."""
+        keys: list[str] = []
+        for candidate in (chat_id, unquote(chat_id)):
+            if not candidate:
+                continue
+            if candidate not in keys:
+                keys.append(candidate)
+            if ":" in candidate:
+                suffix = candidate.split(":", 1)[-1]
+                if suffix and suffix not in keys:
+                    keys.append(suffix)
+            prefixed = f"ws:{candidate}"
+            if not candidate.startswith("ws:") and prefixed not in keys:
+                keys.append(prefixed)
+        return keys
+
+    def _connection_for_outbound(self, chat_id: str) -> ServerConnection | None:
+        """Resolve a live connection; outbound chat_id may differ from URL path key."""
+        for key in self._lookup_keys_for_chat_id(chat_id):
+            ws = self._connections.get(key)
+            if ws is not None:
+                return ws
+        return None
 
     async def start(self) -> None:
         """Start the WebSocket server and listen for connections."""
@@ -110,18 +139,29 @@ class WebSocketChannel(BaseChannel):
             return
 
         async with self._lock:
-            ws = self._connections.get(msg.chat_id)
+            ws = self._connection_for_outbound(msg.chat_id)
 
         if ws is None:
-            logger.warning("No WebSocket connection for chat_id: {}", msg.chat_id)
+            logger.warning(
+                "No WebSocket connection for chat_id: {} (tried keys: {})",
+                msg.chat_id,
+                self._lookup_keys_for_chat_id(msg.chat_id),
+            )
             return
 
         try:
+            meta = msg.metadata or {}
+            if meta.get("_stream_end"):
+                out_type: Literal["message", "delta", "end", "error", "pong"] = "end"
+            elif meta.get("_stream_delta"):
+                out_type = "delta"
+            else:
+                out_type = "message"
             payload = OutboundPayload(
-                type="message",
+                type=out_type,
                 content=msg.content,
                 media=msg.media or [],
-                metadata=msg.metadata or {},
+                metadata=meta,
             ).model_dump_json(ensure_ascii=False)
             await ws.send(payload)
         except Exception as e:
@@ -158,60 +198,79 @@ class WebSocketChannel(BaseChannel):
         except asyncio.CancelledError:
             logger.error("WebSocket server cancelled")
 
-    async def _handle_connection(
-        self, ws: websockets.WebSocketServerProtocol, path: str
-    ) -> None:
+    async def _handle_connection(self, connection: ServerConnection) -> None:
         """Handle an individual WebSocket client connection."""
+        # websockets ≥12: handler receives only the connection; path is on the request
+        req = connection.request
+        path = (req.path if req is not None else "/") or "/"
         # Derive chat_id from the connection path or assign a unique one
-        raw_id = path.strip("/") or str(id(ws))
+        raw_path = path.strip("/") or ""
+        raw_id = unquote(raw_path.split("/")[-1]) if raw_path else str(id(connection))
         chat_id = raw_id
+        alias_keys: list[str] = []
 
-        # Token-based allowlist
-        if self.config.allow_from and chat_id not in self.config.allow_from:
+        # Token-based allowlist (same semantics as BaseChannel.is_allowed for "*")
+        allowed = self.config.allow_from
+        if allowed and "*" not in allowed and chat_id not in allowed:
             logger.warning("chat_id {} rejected: not in allowlist", chat_id)
-            await ws.close(4003, "Forbidden")
+            await connection.close(4003, "Forbidden")
             return
 
         async with self._lock:
             if len(self._connections) >= self.config.max_connections:
-                await ws.close(1008, "Server at capacity")
+                await connection.close(1008, "Server at capacity")
                 return
-            self._connections[chat_id] = ws
+            self._connections[chat_id] = connection
 
         logger.info("WebSocket client connected: {}", chat_id)
 
         try:
-            async for raw in ws:
+            async for raw in connection:
                 try:
                     inbound = InboundPayload.model_validate(json.loads(raw))
                 except json.JSONDecodeError:
                     payload = OutboundPayload(type="error", content="Invalid JSON")
-                    await ws.send(payload.model_dump_json())
+                    await connection.send(payload.model_dump_json())
                     continue
                 except Exception:
                     payload = OutboundPayload(
                         type="error", content="Invalid message format"
                     )
-                    await ws.send(payload.model_dump_json())
+                    await connection.send(payload.model_dump_json())
                     continue
 
                 if inbound.type == "ping":
-                    await ws.send(OutboundPayload(type="pong").model_dump_json())
+                    await connection.send(
+                        OutboundPayload(type="pong").model_dump_json()
+                    )
                 elif inbound.type == "message":
                     content = (inbound.content or "").strip()
                     if not content:
                         continue
+                    sk = (inbound.session_key or "").strip()
+                    if sk and sk != chat_id:
+                        async with self._lock:
+                            self._connections[sk] = connection
+                        if sk not in alias_keys:
+                            alias_keys.append(sk)
                     await self._handle_message(
                         sender_id=inbound.sender_id or chat_id,
                         chat_id=chat_id,
                         content=content,
                         metadata={**(inbound.metadata or {}), "ws_path": path},
+                        session_key=inbound.session_key,
                     )
         except websockets.exceptions.ConnectionClosed:
             pass
         except Exception as e:
             logger.error("WebSocket error for {}: {}", chat_id, e)
         finally:
+            # Multiple connections may share the same chat_id (e.g. React remount).
+            # Only remove dict entries that still point at *this* connection.
             async with self._lock:
-                self._connections.pop(chat_id, None)
+                if self._connections.get(chat_id) is connection:
+                    self._connections.pop(chat_id, None)
+                for alias in alias_keys:
+                    if self._connections.get(alias) is connection:
+                        self._connections.pop(alias, None)
             logger.info("WebSocket client disconnected: {}", chat_id)

@@ -21,10 +21,28 @@ function _dispatchChat(chunk: StreamChunk) {
   }
 }
 
+/** Dispatch a chat stream chunk (e.g. from nanobot `ws` channel WebSocket). */
+export function dispatchChatChunk(chunk: StreamChunk) {
+  _dispatchChat(chunk);
+}
+
 // Expose wsRef so callers can send messages directly
 let _wsRef: RefObject<WebSocket | null> | null = null;
 export function getWSRef(): RefObject<WebSocket | null> | null {
   return _wsRef;
+}
+
+/**
+ * 控制台实时 WebSocket 地址。未配置时不连接（当前仓库 FastAPI 未挂载 /ws，避免无限重连报错）。
+ * 开发示例：`VITE_CONSOLE_WS_URL=ws://localhost:3000/ws`（走 Vite 代理到 API 端口）。
+ */
+function resolveConsoleWsUrl(): string | null {
+  const raw = import.meta.env.VITE_CONSOLE_WS_URL;
+  if (raw === undefined || raw === null) {
+    return null;
+  }
+  const trimmed = String(raw).trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 export function useWebSocket() {
@@ -42,13 +60,17 @@ export function useWebSocket() {
       return;
     }
 
+    const wsUrl = resolveConsoleWsUrl();
+    if (!wsUrl) {
+      console.log(
+        "[WebSocket] Console push disabled (set VITE_CONSOLE_WS_URL to enable)",
+      );
+      return;
+    }
+
     isConnectingRef.current = true;
 
-    // Determine WebSocket URL - connect directly to backend
-    // In dev: localhost:3000 -> proxy -> localhost:18791
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
-
-    console.log('[WebSocket] Connecting to:', wsUrl);
+    console.log("[WebSocket] Connecting to:", wsUrl);
 
     try {
       const ws = new WebSocket(wsUrl);

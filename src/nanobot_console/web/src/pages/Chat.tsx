@@ -3,6 +3,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import { useAppStore } from "../store";
+import {
+  resolveNanobotWsBase,
+  useNanobotChannelWebSocket,
+} from "../hooks/useNanobotChannelWebSocket";
 import { registerChatHandler, getWSRef } from "../hooks/useWebSocket";
 import * as api from "../api/client";
 import { Button, Tag, Tooltip, Popconfirm } from "antd";
@@ -166,8 +170,36 @@ export default function Chat() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<TextAreaRef>(null);
   const streamingContentRef = useRef("");
+  /** 新会话首条消息：等待 nanobot `ws` 频道连接后再发送 */
+  const pendingNanobotOutboundRef = useRef<string | null>(null);
 
   const activeSessionKey = paramSessionKey || currentSessionKey;
+
+  const nanobotWsBase = resolveNanobotWsBase();
+  const useNanobotChannel = nanobotWsBase.length > 0;
+
+  /** 无 URL 会话时仍连 `/nanobot-ws/:chat_id`，占位 id 与首条发送时一致 */
+  const nanobotWsPlaceholderRef = useRef<string | null>(null);
+  /** 避免路由/store 短暂不同步时 sessionKey 变 null，误关仍等待回复的 WebSocket */
+  const nanobotWsSessionStableRef = useRef<string | null>(null);
+
+  const wsSessionKeyForNanobot =
+    activeSessionKey ??
+    (useNanobotChannel
+      ? (nanobotWsPlaceholderRef.current ??= crypto.randomUUID())
+      : null);
+
+  if (wsSessionKeyForNanobot) {
+    nanobotWsSessionStableRef.current = wsSessionKeyForNanobot;
+  }
+  const stableNanobotWsSessionKey =
+    wsSessionKeyForNanobot ?? nanobotWsSessionStableRef.current;
+
+  const { sendMessage: sendNanobotMessage, ready: nanobotWsReady } =
+    useNanobotChannelWebSocket({
+      enabled: useNanobotChannel,
+      sessionKey: stableNanobotWsSessionKey,
+    });
 
   const { data: sessions } = useQuery({
     queryKey: ["sessions", currentBotId],
@@ -180,6 +212,8 @@ export default function Chat() {
       queryClient.invalidateQueries({ queryKey: ["sessions"] });
       queryClient.invalidateQueries({ queryKey: ["session", key] });
       if (activeSessionKey === key) {
+        nanobotWsPlaceholderRef.current = null;
+        nanobotWsSessionStableRef.current = null;
         setCurrentSessionKey(null);
         setMessages([]);
         setShowSuggestions(true);
@@ -391,6 +425,41 @@ export default function Chat() {
     return unregister;
   }, [handleStreamChunk]);
 
+  // nanobot `ws` 频道：连接就绪后发送队列中的首条消息（新会话）
+  useEffect(() => {
+    if (!useNanobotChannel || !nanobotWsReady || !activeSessionKey) {
+      return;
+    }
+    const pending = pendingNanobotOutboundRef.current;
+    if (!pending) {
+      return;
+    }
+    try {
+      sendNanobotMessage({
+        content: pending,
+        botId: currentBotId,
+        sessionKeyOverride: activeSessionKey,
+      });
+      pendingNanobotOutboundRef.current = null;
+    } catch {
+      pendingNanobotOutboundRef.current = null;
+      setIsStreaming(false);
+      setStreamingContent("");
+      addToast({
+        type: "error",
+        message:
+          "nanobot WebSocket 发送失败，请确认 nanobot 已启动且 ws 频道已启用",
+      });
+    }
+  }, [
+    useNanobotChannel,
+    nanobotWsReady,
+    activeSessionKey,
+    currentBotId,
+    sendNanobotMessage,
+    addToast,
+  ]);
+
   const handleSend = () => {
     if (!input.trim() || isStreaming) return;
 
@@ -414,6 +483,39 @@ export default function Chat() {
     streamingContentRef.current = "";
     setToolCalls([]);
     setStreamingToolProgress([]);
+
+    if (useNanobotChannel) {
+      let sk = activeSessionKey;
+      if (!sk) {
+        sk =
+          nanobotWsPlaceholderRef.current ?? crypto.randomUUID();
+        nanobotWsPlaceholderRef.current = sk;
+        setCurrentSessionKey(sk);
+        navigate(`/chat/${sk}`, { replace: true });
+        pendingNanobotOutboundRef.current = userMessage;
+        return;
+      }
+      if (!nanobotWsReady) {
+        pendingNanobotOutboundRef.current = userMessage;
+        return;
+      }
+      try {
+        sendNanobotMessage({
+          content: userMessage,
+          botId: currentBotId,
+          sessionKeyOverride: sk,
+        });
+      } catch {
+        setIsStreaming(false);
+        setStreamingContent("");
+        addToast({
+          type: "error",
+          message:
+            "nanobot WebSocket 未连接，请确认 nanobot 已启动且 ws 频道已启用",
+        });
+      }
+      return;
+    }
 
     const ws = getWSRef()?.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -442,6 +544,8 @@ export default function Chat() {
   };
 
   const handleNewChat = () => {
+    nanobotWsPlaceholderRef.current = null;
+    nanobotWsSessionStableRef.current = null;
     setCurrentSessionKey(null);
     setMessages([]);
     setShowSuggestions(true);
