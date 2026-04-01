@@ -82,10 +82,7 @@ const navSections: NavSection[] = [
   },
   {
     title: 'Management',
-    items: [
-      { path: '/bots', label: 'Bots', icon: Bot },
-      { path: '/settings', label: 'Settings', icon: Settings },
-    ],
+    items: [{ path: '/settings', label: 'Settings', icon: Settings }],
   },
 ];
 
