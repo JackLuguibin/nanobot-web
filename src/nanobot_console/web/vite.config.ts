@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 const host = process.env.VITE_API_HOST || 'localhost'
-const port = process.env.VITE_API_PORT || '18791'
+const port = process.env.VITE_API_PORT || '8000'
 const nanobotWsHost = process.env.VITE_NANOBOT_WS_HOST || 'localhost'
 const nanobotWsPort = process.env.VITE_NANOBOT_WS_PORT || '8765'
 

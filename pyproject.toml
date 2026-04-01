@@ -17,7 +17,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "nanobot-ai>=0.1.4.post6",
+    "nanobot-ai @ git+https://github.com/HKUDS/nanobot.git@main",
     "loguru>=0.7.0",
     "websockets>=12.0",
     "fastapi>=0.110.0",

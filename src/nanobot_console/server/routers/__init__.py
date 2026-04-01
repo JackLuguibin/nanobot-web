@@ -1,5 +1,5 @@
 """API route modules."""
 
-from nanobot_console.server.routers import health
+from . import v1
 
-__all__ = ["health"]
+__all__ = ["v1"]

@@ -14,7 +14,7 @@ from loguru import logger
 
 from nanobot_console.server.config import ServerSettings, get_settings
 from nanobot_console.server.models import ErrorDetail, ErrorResponse
-from nanobot_console.server.routers import health
+from nanobot_console.server.routers import v1
 
 _ERR_VALIDATION_CODE = "VALIDATION_ERROR"
 _ERR_VALIDATION_MSG = "Request validation failed"
@@ -111,7 +111,7 @@ def create_app(settings: ServerSettings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    app.include_router(health.router, prefix=settings.api_prefix)
+    app.include_router(v1.api_router, prefix=settings.api_prefix)
 
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
