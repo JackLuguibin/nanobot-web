@@ -127,7 +127,6 @@ interface FormData {
   context_window_tokens: number;
   max_iterations: number;
   temperature: number;
-  memory_window: number;
   reasoning_effort: string;
   restrict_to_workspace: boolean;
 }
@@ -208,7 +207,6 @@ export default function Settings() {
         context_window_tokens: Number(raw('contextWindowTokens', 'context_window_tokens', 65536)),
         max_iterations: Number(raw('maxToolIterations', 'max_tool_iterations', 40)),
         temperature: Number(raw('temperature', 'temperature', 0.1)),
-        memory_window: Number(raw('memoryWindow', 'memory_window', 100)),
         reasoning_effort: (raw('reasoningEffort', 'reasoning_effort', 'medium') as string) || 'medium',
         restrict_to_workspace: (tools?.restrictToWorkspace as boolean) || false,
       });
@@ -230,7 +228,6 @@ export default function Settings() {
             context_window_tokens: values.context_window_tokens,
             max_tool_iterations: values.max_iterations,
             temperature: values.temperature,
-            memory_window: values.memory_window,
             reasoning_effort: values.reasoning_effort,
           },
         },
@@ -517,13 +514,6 @@ export default function Settings() {
                 marks={{ 0: '0.0', 1: '1.0', 2: '2.0' }}
                 tooltip={{ formatter: (v) => (v !== undefined ? v.toFixed(1) : '') }}
               />
-            </Form.Item>
-
-            <Form.Item label="Memory Window" name="memory_window">
-              <Space.Compact size="large">
-                <InputNumber min={1} max={1000} className="w-full max-w-[180px]" />
-                <Input readOnly value="messages" className="!w-[100px] !pointer-events-none !select-none" />
-              </Space.Compact>
             </Form.Item>
           </Form>
         </Card>

@@ -1,35 +1,16 @@
-"""Configuration section models (loose shapes for stub phase)."""
+"""Configuration section models (nanobot ``config.json`` envelope)."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
-
-
-class GeneralConfig(BaseModel):
-    """``general`` subsection."""
-
-    model_config = ConfigDict(extra="allow")
-
-    workspace: str | None = None
-    model: str | None = None
-    max_iterations: int | None = None
-    temperature: float | None = None
-    memory_window: int | None = None
-    reasoning_effort: str | None = None
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ConfigSection(BaseModel):
-    """Merged config document (subset typed, rest flexible)."""
+    """Full ``config.json`` document (camelCase keys; extra keys allowed)."""
 
     model_config = ConfigDict(extra="allow")
-
-    general: GeneralConfig | None = None
-    providers: dict[str, Any] | None = None
-    tools: dict[str, Any] | None = None
-    channels: dict[str, Any] | None = None
-    skills: dict[str, Any] | None = None
 
 
 class ConfigPutBody(BaseModel):
@@ -37,8 +18,18 @@ class ConfigPutBody(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    section: str
+    section: str = Field(min_length=1)
     data: dict[str, Any]
+
+    @field_validator("section")
+    @classmethod
+    def strip_section(cls, value: str) -> str:
+        """Reject whitespace-only section names."""
+        stripped = value.strip()
+        if not stripped:
+            msg = "section must not be empty"
+            raise ValueError(msg)
+        return stripped
 
 
 class ConfigValidateResponse(BaseModel):

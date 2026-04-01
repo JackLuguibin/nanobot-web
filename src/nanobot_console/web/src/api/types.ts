@@ -147,7 +147,6 @@ export interface GeneralConfig {
   model?: string;
   max_iterations?: number;
   temperature?: number;
-  memory_window?: number;
   reasoning_effort?: string;
 }
 
