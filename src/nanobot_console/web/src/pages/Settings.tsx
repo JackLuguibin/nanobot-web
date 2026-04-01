@@ -397,13 +397,14 @@ export default function Settings() {
           className="shadow-sm border border-gray-200/80 dark:border-gray-700/80"
           styles={{ body: { paddingTop: 4 } }}
         >
-          <Form form={form} layout="vertical" className="max-w-xl">
+          <Form form={form} layout="vertical" className="w-full">
             <Form.Item
               label="Model"
               name="model"
               extra="Select a suggested model or type provider/model (e.g. anthropic/claude-opus-4-5)"
             >
               <AutoComplete
+                className="w-full"
                 size="large"
                 placeholder="e.g. anthropic/claude-opus-4-5, deepseek-v3.2"
                 options={[
@@ -426,6 +427,7 @@ export default function Settings() {
               extra="Select a LLM provider or leave as 'auto' for automatic detection"
             >
               <AutoComplete
+                className="w-full"
                 size="large"
                 placeholder="e.g. auto, anthropic, openai, deepseek"
                 options={[
@@ -439,7 +441,11 @@ export default function Settings() {
             </Form.Item>
 
             <Form.Item label="Reasoning Effort" name="reasoning_effort">
-              <Radio.Group buttonStyle="solid" size="large">
+              <Radio.Group
+                buttonStyle="solid"
+                size="large"
+                className="flex w-full [&_.ant-radio-button-wrapper]:flex-1 [&_.ant-radio-button-wrapper]:text-center"
+              >
                 <Radio.Button value="low">Low</Radio.Button>
                 <Radio.Button value="medium">Medium</Radio.Button>
                 <Radio.Button value="high">High</Radio.Button>
@@ -451,7 +457,7 @@ export default function Settings() {
               name="workspace"
               extra="Directory for bot workspace files (e.g. ~/.nanobot/workspace)"
             >
-              <Input placeholder="~/.nanobot/workspace" size="large" />
+              <Input className="w-full" placeholder="~/.nanobot/workspace" size="large" />
             </Form.Item>
 
             <Form.Item
@@ -465,7 +471,7 @@ export default function Settings() {
               }
               name="max_tokens"
             >
-              <InputNumber min={1} max={200000} className="w-full max-w-[200px]" size="large" />
+              <InputNumber min={1} max={200000} className="w-full" size="large" />
             </Form.Item>
 
             <Form.Item
@@ -479,7 +485,7 @@ export default function Settings() {
               }
               name="context_window_tokens"
             >
-              <InputNumber min={1} max={1000000} className="w-full max-w-[200px]" size="large" />
+              <InputNumber min={1} max={1000000} className="w-full" size="large" />
             </Form.Item>
 
             <Form.Item
