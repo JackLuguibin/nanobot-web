@@ -1,11 +1,20 @@
-"""Channel configuration and refresh (stub)."""
+"""Channel configuration and refresh."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
+from nanobot_console.server.channels_service import (
+    ChannelNotFoundError,
+    channel_plugin_exists,
+    disable_channel,
+    list_channel_statuses,
+    merge_channel_patch,
+    plugin_channel_names,
+    refresh_channel_results,
+)
 from nanobot_console.server.models import DataResponse, OkBody
 from nanobot_console.server.models.channels import (
     ChannelRefreshResult,
@@ -20,9 +29,8 @@ router = APIRouter(tags=["Channels"])
 async def list_channels(
     bot_id: str | None = Query(default=None, alias="bot_id"),
 ) -> DataResponse[list[ChannelStatus]]:
-    """List channel status rows (stub)."""
-    _ = bot_id
-    return DataResponse(data=[])
+    """List channel status rows from ``config.json`` and runtime."""
+    return DataResponse(data=list_channel_statuses(bot_id))
 
 
 @router.put("/channels/{name}", response_model=DataResponse[dict[str, Any]])
@@ -31,9 +39,12 @@ async def update_channel(
     body: ChannelUpdateBody,
     bot_id: str | None = Query(default=None, alias="bot_id"),
 ) -> DataResponse[dict[str, Any]]:
-    """Update channel config (stub)."""
-    _ = name, body, bot_id
-    return DataResponse(data={})
+    """Merge ``body.data`` into ``channels.<name>`` and save ``config.json``."""
+    try:
+        saved = merge_channel_patch(bot_id, name, body.data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return DataResponse(data=saved)
 
 
 @router.delete("/channels/{name}", response_model=DataResponse[OkBody])
@@ -41,8 +52,13 @@ async def delete_channel(
     name: str,
     bot_id: str | None = Query(default=None, alias="bot_id"),
 ) -> DataResponse[OkBody]:
-    """Delete channel (stub)."""
-    _ = name, bot_id
+    """Disable a channel (sets ``enabled`` to false)."""
+    try:
+        disable_channel(bot_id, name)
+    except ChannelNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return DataResponse(data=OkBody())
 
 
@@ -53,9 +69,9 @@ async def delete_channel(
 async def refresh_all_channels(
     bot_id: str | None = Query(default=None, alias="bot_id"),
 ) -> DataResponse[list[ChannelRefreshResult]]:
-    """Refresh all channels (stub)."""
-    _ = bot_id
-    return DataResponse(data=[])
+    """Re-evaluate channel entries (config snapshot refresh)."""
+    names = plugin_channel_names(bot_id)
+    return DataResponse(data=refresh_channel_results(bot_id, names))
 
 
 @router.post(
@@ -66,8 +82,10 @@ async def refresh_channel(
     name: str,
     bot_id: str | None = Query(default=None, alias="bot_id"),
 ) -> DataResponse[ChannelRefreshResult]:
-    """Refresh one channel (stub)."""
-    _ = bot_id
-    return DataResponse(
-        data=ChannelRefreshResult(name=name, success=True, message=None)
-    )
+    """Refresh one channel entry."""
+    if not channel_plugin_exists(bot_id, name):
+        raise HTTPException(status_code=404, detail=f"Unknown channel: {name}")
+    results = refresh_channel_results(bot_id, [name])
+    if not results:
+        raise HTTPException(status_code=404, detail=f"Unknown channel: {name}")
+    return DataResponse(data=results[0])

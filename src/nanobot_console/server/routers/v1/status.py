@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 
 from nanobot_console.server.bot_workspace import read_bot_runtime
+from nanobot_console.server.channels_service import list_channel_statuses
 from nanobot_console.server.dashboard_metrics import collect_dashboard_metrics
 from nanobot_console.server.mcp_config import mcp_statuses_for_bot
 from nanobot_console.server.models import DataResponse, StatusResponse
@@ -38,6 +39,7 @@ async def get_status(
                 "active_sessions": metrics.active_sessions,
                 "messages_today": metrics.messages_today,
                 "token_usage": metrics.token_usage_today,
+                "channels": list_channel_statuses(bot_id),
             }
         )
     )
