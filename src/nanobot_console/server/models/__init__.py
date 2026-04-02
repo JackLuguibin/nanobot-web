@@ -55,6 +55,7 @@ from nanobot_console.server.models.plans import (
 )
 from nanobot_console.server.models.sessions import (
     BatchDeleteBody,
+    BatchDeleteFailure,
     BatchDeleteResponse,
     CreateSessionBody,
     SessionDetail,
@@ -89,6 +90,7 @@ __all__ = [
     "Alert",
     "BaseResponse",
     "BatchDeleteBody",
+    "BatchDeleteFailure",
     "BatchDeleteResponse",
     "BotFilesResponse",
     "BotFileUpdateBody",
