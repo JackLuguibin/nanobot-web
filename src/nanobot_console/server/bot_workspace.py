@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,6 +17,7 @@ from nanobot.config.loader import load_config
 from nanobot_console.server.nanobot_user_config import resolve_config_path
 
 _CONSOLE_DIR = ".nanobot_console"
+_RUNTIME_STATE_FILE = "runtime_state.json"
 _MEMORY_DIR = "memory"
 _AGENTS_FILE = "agents.json"
 _PLANS_FILE = "plans.json"
@@ -46,6 +48,54 @@ def console_state_dir(bot_id: str | None) -> Path:
     d = root / _CONSOLE_DIR
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def runtime_state_path(bot_id: str | None) -> Path:
+    """JSON file for API-reported bot running flag and start time."""
+    return console_state_dir(bot_id) / _RUNTIME_STATE_FILE
+
+
+def read_bot_runtime(bot_id: str | None) -> tuple[bool, float]:
+    """Return ``(running, uptime_seconds)`` from persisted console state."""
+    path = runtime_state_path(bot_id)
+    data = load_json_file(path, {"running": False, "started_at": None})
+    running = bool(data.get("running"))
+    started = data.get("started_at")
+    if not running or started is None:
+        return False, 0.0
+    try:
+        if isinstance(started, (int, float)):
+            start_ts = float(started)
+        elif isinstance(started, str):
+            dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            start_ts = dt.timestamp()
+        else:
+            return running, 0.0
+    except (ValueError, TypeError, OSError):
+        return running, 0.0
+    return True, max(0.0, time.time() - start_ts)
+
+
+def set_bot_running(bot_id: str | None, running: bool) -> None:
+    """Persist running flag; set ``started_at`` when transitioning to running."""
+    path = runtime_state_path(bot_id)
+    data = load_json_file(path, {"running": False, "started_at": None})
+    if running:
+        if not data.get("running"):
+            data["started_at"] = iso_now()
+        data["running"] = True
+    else:
+        data["running"] = False
+        data["started_at"] = None
+    save_json_file(path, data)
+
+
+def is_bot_running(bot_id: str | None) -> bool:
+    """Return the persisted *running* flag for dashboard / bot list."""
+    data = load_json_file(runtime_state_path(bot_id), {"running": False})
+    return bool(data.get("running"))
 
 
 def normalize_workspace_rel_path(raw: str | None) -> str:

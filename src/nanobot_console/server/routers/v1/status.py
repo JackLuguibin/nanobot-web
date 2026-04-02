@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
+from nanobot_console.server.bot_workspace import read_bot_runtime
+from nanobot_console.server.dashboard_metrics import collect_dashboard_metrics
 from nanobot_console.server.mcp_config import mcp_statuses_for_bot
 from nanobot_console.server.models import DataResponse, StatusResponse
 from nanobot_console.server.models.status import placeholder_status
@@ -24,6 +26,18 @@ async def get_status(
     path = resolve_config_path(bot_id)
     model = read_default_model(path)
     mcp_rows = mcp_statuses_for_bot(bot_id)
+    running, uptime_seconds = read_bot_runtime(bot_id)
+    metrics = collect_dashboard_metrics(bot_id, history_days=14)
     return DataResponse(
-        data=base.model_copy(update={"model": model, "mcp_servers": mcp_rows})
+        data=base.model_copy(
+            update={
+                "model": model,
+                "mcp_servers": mcp_rows,
+                "running": running,
+                "uptime_seconds": uptime_seconds,
+                "active_sessions": metrics.active_sessions,
+                "messages_today": metrics.messages_today,
+                "token_usage": metrics.token_usage_today,
+            }
+        )
     )

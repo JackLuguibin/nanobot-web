@@ -7,7 +7,11 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, status
 
-from nanobot_console.server.bot_workspace import workspace_root
+from nanobot_console.server.bot_workspace import (
+    is_bot_running,
+    set_bot_running,
+    workspace_root,
+)
 from nanobot_console.server.models import (
     CreateBotRequest,
     DataResponse,
@@ -45,7 +49,7 @@ def _bot_info(bot_id: str | None) -> BotInfo:
         created_at=ts,
         updated_at=ts,
         is_default=True,
-        running=False,
+        running=is_bot_running(bot_id),
     )
 
 
@@ -95,6 +99,7 @@ async def set_default_bot(_body: SetDefaultBotBody) -> DataResponse[OkBody]:
 async def start_bot(bot_id: str) -> DataResponse[BotInfo]:
     """Mark bot as running in API only (no process supervisor)."""
     _ = bot_id
+    set_bot_running(None, True)
     info = _bot_info(None)
     return DataResponse(data=info.model_copy(update={"running": True}))
 
@@ -103,5 +108,6 @@ async def start_bot(bot_id: str) -> DataResponse[BotInfo]:
 async def stop_bot(bot_id: str) -> DataResponse[BotInfo]:
     """Mark bot as stopped in API only (no process supervisor)."""
     _ = bot_id
+    set_bot_running(None, False)
     info = _bot_info(None)
     return DataResponse(data=info.model_copy(update={"running": False}))
