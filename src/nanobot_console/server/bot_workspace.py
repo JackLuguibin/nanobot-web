@@ -1,0 +1,225 @@
+"""Workspace paths, console state files, and safe path I/O for bot-scoped APIs."""
+
+from __future__ import annotations
+
+import json
+import re
+import uuid
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from fastapi import HTTPException
+from loguru import logger
+from nanobot.config.loader import load_config
+
+from nanobot_console.server.nanobot_user_config import resolve_config_path
+
+_CONSOLE_DIR = ".nanobot_console"
+_MEMORY_DIR = "memory"
+_AGENTS_FILE = "agents.json"
+_PLANS_FILE = "plans.json"
+_TOOL_LOGS_FILE = "tool_logs.json"
+_PROFILE_FILES: dict[str, str] = {
+    "soul": "SOUL.md",
+    "user": "USER.md",
+    "heartbeat": "HEARTBEAT.md",
+    "tools": "TOOLS.md",
+    "agents": "AGENTS.md",
+}
+# Matches ``nanobot.agent.memory.MemoryStore`` (MEMORY.md + HISTORY.md).
+_MEMORY_FILES = {"long_term": "MEMORY.md", "history": "HISTORY.md"}
+# Older console builds used these names under the same directory.
+_MEMORY_LEGACY = {"long_term": "long_term.md", "history": "history.md"}
+_CURSOR_SKILLS = Path(".cursor") / "skills"
+
+
+def workspace_root(bot_id: str | None) -> Path:
+    """Return expanded workspace directory from nanobot ``config.json``."""
+    cfg = load_config(resolve_config_path(bot_id))
+    return cfg.workspace_path.resolve()
+
+
+def console_state_dir(bot_id: str | None) -> Path:
+    """Directory for console-managed JSON state (under workspace)."""
+    root = workspace_root(bot_id)
+    d = root / _CONSOLE_DIR
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def normalize_workspace_rel_path(raw: str | None) -> str:
+    """Return a safe relative path segment under the workspace (exported API)."""
+    return _normalize_rel_path(raw)
+
+
+def _normalize_rel_path(raw: str | None) -> str:
+    """Return a POSIX relative path without leading slashes or ``..`` segments."""
+    if raw is None or raw.strip() == "":
+        return ""
+    parts: list[str] = []
+    for segment in raw.replace("\\", "/").strip("/").split("/"):
+        if segment in ("", "."):
+            continue
+        if segment == "..":
+            raise HTTPException(status_code=400, detail="Invalid path")
+        parts.append(segment)
+    return "/".join(parts)
+
+
+def resolve_workspace_path(
+    bot_id: str | None,
+    rel: str | None,
+    *,
+    must_exist: bool,
+) -> Path:
+    """Resolve ``rel`` under the workspace root; reject path traversal."""
+    root = workspace_root(bot_id)
+    normalized = _normalize_rel_path(rel)
+    target = (root / normalized).resolve() if normalized else root
+    try:
+        target.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Path escapes workspace") from exc
+    if must_exist and not target.exists():
+        raise HTTPException(status_code=404, detail="Path not found")
+    return target
+
+
+def read_text(path: Path) -> str:
+    """Read UTF-8 text; replace undecodable bytes."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        logger.warning("[workspace] read failed {}: {}", path, exc)
+        raise HTTPException(status_code=500, detail="Failed to read file") from exc
+
+
+def write_text(path: Path, content: str) -> None:
+    """Write UTF-8 text, creating parent directories."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    except OSError as exc:
+        logger.warning("[workspace] write failed {}: {}", path, exc)
+        raise HTTPException(status_code=500, detail="Failed to write file") from exc
+
+
+def profile_file_path(bot_id: str | None, key: str) -> Path:
+    """Absolute path to a bootstrap markdown file in the workspace root."""
+    if key not in _PROFILE_FILES:
+        raise HTTPException(status_code=400, detail="Unknown profile key")
+    root = workspace_root(bot_id)
+    return root / _PROFILE_FILES[key]
+
+
+def read_memory_text(bot_id: str | None, kind: str) -> str:
+    """Read long-term or history from ``<workspace>/memory/``.
+
+    Prefers nanobot's ``MEMORY.md`` / ``HISTORY.md``, then legacy ``long_term.md`` /
+    ``history.md``.
+    """
+    if kind not in _MEMORY_FILES:
+        raise HTTPException(status_code=400, detail="Unknown memory kind")
+    base = workspace_root(bot_id) / _MEMORY_DIR
+    primary = base / _MEMORY_FILES[kind]
+    if primary.is_file():
+        return read_text(primary)
+    legacy = base / _MEMORY_LEGACY[kind]
+    if legacy.is_file():
+        return read_text(legacy)
+    return ""
+
+
+def agents_state_path(bot_id: str | None) -> Path:
+    """JSON file backing multi-agent records and categories."""
+    return console_state_dir(bot_id) / _AGENTS_FILE
+
+
+def plans_path(bot_id: str | None) -> Path:
+    """JSON file for Kanban / plans board."""
+    return console_state_dir(bot_id) / _PLANS_FILE
+
+
+def tool_logs_path(bot_id: str | None) -> Path:
+    """JSON array file for tool invocation logs (optional external writer)."""
+    return console_state_dir(bot_id) / _TOOL_LOGS_FILE
+
+
+def iso_now() -> str:
+    """UTC ISO-8601 timestamp with ``Z`` suffix."""
+    return datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def new_id(prefix: str = "") -> str:
+    """Short unique id for agents and log rows."""
+    suffix = uuid.uuid4().hex[:12]
+    return f"{prefix}{suffix}" if prefix else suffix
+
+
+_SKILL_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$")
+
+
+def validate_skill_name(name: str) -> str:
+    """Return ``name`` if safe for a filesystem skill folder."""
+    n = name.strip()
+    if not _SKILL_NAME_RE.fullmatch(n):
+        raise HTTPException(status_code=400, detail="Invalid skill name")
+    return n
+
+
+def workspace_skill_md_path(bot_id: str | None, name: str) -> Path:
+    """``<workspace>/.cursor/skills/<name>/SKILL.md``."""
+    n = validate_skill_name(name)
+    return workspace_root(bot_id) / _CURSOR_SKILLS / n / "SKILL.md"
+
+
+def iter_workspace_skill_dirs(bot_id: str | None) -> list[Path]:
+    """List skill directories under ``.cursor/skills`` that contain ``SKILL.md``."""
+    base = workspace_root(bot_id) / _CURSOR_SKILLS
+    if not base.is_dir():
+        return []
+    result: list[Path] = []
+    for child in sorted(base.iterdir()):
+        if child.is_dir() and (child / "SKILL.md").is_file():
+            result.append(child)
+    return result
+
+
+def skill_description_preview(md_path: Path, limit: int = 240) -> str:
+    """First non-empty lines of a skill file as description."""
+    try:
+        text = md_path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            return stripped[:limit]
+    return ""
+
+
+def load_json_file(path: Path, default: Any) -> Any:
+    """Load JSON object from ``path``; return ``default`` if missing or invalid."""
+    if not path.is_file():
+        return default
+    try:
+        with path.open(encoding="utf-8") as f:
+            data: Any = json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("[workspace] bad JSON {}: {}", path, exc)
+        return default
+    return data
+
+
+def save_json_file(path: Path, data: Any) -> None:
+    """Atomically write JSON with indentation."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    try:
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        tmp.replace(path)
+    except OSError as exc:
+        logger.warning("[workspace] JSON save failed {}: {}", path, exc)
+        raise HTTPException(status_code=500, detail="Failed to save state") from exc

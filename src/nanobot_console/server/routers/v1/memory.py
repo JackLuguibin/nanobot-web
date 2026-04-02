@@ -1,9 +1,10 @@
-"""Long-term memory (stub)."""
+"""Long-term memory and history under ``<workspace>/memory/`` (nanobot workspace)."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
+from nanobot_console.server.bot_workspace import read_memory_text
 from nanobot_console.server.models import DataResponse, MemoryResponse
 
 router = APIRouter(tags=["Memory"])
@@ -13,6 +14,7 @@ router = APIRouter(tags=["Memory"])
 async def get_memory(
     bot_id: str | None = Query(default=None, alias="bot_id"),
 ) -> DataResponse[MemoryResponse]:
-    """Return memory blobs (stub)."""
-    _ = bot_id
-    return DataResponse(data=MemoryResponse(long_term="", history=""))
+    """Return long-term memory and history (same files as nanobot ``MemoryStore``)."""
+    long_term = read_memory_text(bot_id, "long_term")
+    history = read_memory_text(bot_id, "history")
+    return DataResponse(data=MemoryResponse(long_term=long_term, history=history))

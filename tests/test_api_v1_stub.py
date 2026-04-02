@@ -27,9 +27,12 @@ def test_health_envelope(client: TestClient) -> None:
 
 
 def test_bots_list_stub(client: TestClient) -> None:
-    """Bots list returns empty array in envelope."""
+    """Bots list returns the default nanobot instance in envelope."""
     response = client.get("/api/v1/bots")
     assert response.status_code == 200
     body = response.json()
     assert body["code"] == 0
-    assert body["data"] == []
+    assert isinstance(body["data"], list)
+    assert len(body["data"]) == 1
+    assert body["data"][0]["id"] == "default"
+    assert body["data"][0]["workspace_path"]

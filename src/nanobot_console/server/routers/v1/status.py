@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
+from nanobot_console.server.mcp_config import mcp_statuses_for_bot
 from nanobot_console.server.models import DataResponse, StatusResponse
 from nanobot_console.server.models.status import placeholder_status
 from nanobot_console.server.nanobot_user_config import (
@@ -18,8 +19,11 @@ router = APIRouter(tags=["Status"])
 async def get_status(
     bot_id: str | None = Query(default=None, alias="bot_id"),
 ) -> DataResponse[StatusResponse]:
-    """Return status; ``model`` comes from ``config.json`` when present."""
+    """Return status; ``model`` and ``mcp_servers`` reflect ``config.json``."""
     base = placeholder_status()
     path = resolve_config_path(bot_id)
     model = read_default_model(path)
-    return DataResponse(data=base.model_copy(update={"model": model}))
+    mcp_rows = mcp_statuses_for_bot(bot_id)
+    return DataResponse(
+        data=base.model_copy(update={"model": model, "mcp_servers": mcp_rows})
+    )

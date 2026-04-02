@@ -253,7 +253,13 @@ export async function getToolLogs(
 // ====================
 
 export async function getMemory(botId?: string | null): Promise<MemoryResponse> {
-  return fetchJson<MemoryResponse>(appendBotQuery(`${API_BASE}/memory`, botId));
+  const raw = await fetchJson<
+    MemoryResponse & { longTerm?: string }
+  >(appendBotQuery(`${API_BASE}/memory`, botId));
+  return {
+    long_term: raw.long_term ?? raw.longTerm ?? '',
+    history: raw.history ?? '',
+  };
 }
 
 export async function getBotFiles(botId?: string | null): Promise<BotFilesResponse> {

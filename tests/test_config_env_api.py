@@ -104,3 +104,27 @@ def test_config_schema_endpoint(client: TestClient) -> None:
     assert response.status_code == 200
     schema = response.json()["data"]
     assert schema.get("title") == "Config" or "properties" in schema
+
+
+def test_memory_reads_nanobot_memory_files(
+    client: TestClient, temp_config_dir: Path
+) -> None:
+    """GET /memory reads ``MEMORY.md`` / ``HISTORY.md`` (nanobot ``MemoryStore``)."""
+    ws = temp_config_dir / "ws"
+    mem = ws / "memory"
+    mem.mkdir(parents=True)
+    (mem / "MEMORY.md").write_text("# hello\n", encoding="utf-8")
+    (mem / "HISTORY.md").write_text("[2025-01-01 10:00] evt\n", encoding="utf-8")
+    r_cfg = client.put(
+        "/api/v1/config",
+        json={
+            "section": "agents",
+            "data": {"defaults": {"workspace": str(ws)}},
+        },
+    )
+    assert r_cfg.status_code == 200
+    r_mem = client.get("/api/v1/memory")
+    assert r_mem.status_code == 200
+    data = r_mem.json()["data"]
+    assert "hello" in data["long_term"]
+    assert "2025-01-01" in data["history"]
