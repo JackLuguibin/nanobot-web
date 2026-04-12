@@ -198,8 +198,8 @@ export function SubagentPanel({ tasks, collapsed = false, onCollapse }: Subagent
                         <Text type="secondary" className="text-xs block mb-1">
                           任务描述
                         </Text>
-                        <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-2 text-xs">
-                          <Text ellipsis={{ rows: 3 }}>{task.task}</Text>
+                        <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-2 text-xs line-clamp-3">
+                          <Text>{task.task}</Text>
                         </div>
                       </div>
                     )}

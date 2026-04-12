@@ -216,18 +216,6 @@ export default function Agents() {
     },
   });
 
-  const enableMutation = useMutation({
-    mutationFn: (agentId: string) => api.enableAgent(currentBotId!, agentId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agents', currentBotId] });
-      queryClient.invalidateQueries({ queryKey: ['agents-status', currentBotId] });
-      addToast({ type: 'success', message: 'Agent enabled' });
-    },
-    onError: (err: Error) => {
-      addToast({ type: 'error', message: `Failed to enable: ${err.message}` });
-    },
-  });
-
   const disableMutation = useMutation({
     mutationFn: (agentId: string) => api.disableAgent(currentBotId!, agentId),
     onSuccess: () => {

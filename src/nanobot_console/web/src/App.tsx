@@ -19,7 +19,6 @@ import Cron from './pages/Cron';
 import Health from './pages/Health';
 import Workspace from './pages/Workspace';
 import Activity from './pages/Activity';
-import Queue from './pages/Queue';
 
 function resolveIsDark(theme: 'light' | 'dark' | 'system'): boolean {
   if (theme === 'dark') return true;
@@ -49,7 +48,6 @@ function AppRoutes() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/activity" element={<Activity />} />
-          <Route path="/queue" element={<Queue />} />
         </Routes>
       </Layout>
       <ToastBridge />

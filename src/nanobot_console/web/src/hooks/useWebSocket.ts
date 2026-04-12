@@ -3,7 +3,6 @@ import type { RefObject } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store';
 import type { StatusResponse, SessionInfo, WSMessage, ActivityItem } from '../api/types';
-import type { QueueStatus } from '../api/types_queue';
 import type { StreamChunk } from '../api/types';
 
 // Global chat message handler registry (used by Chat.tsx for WS streaming)
@@ -131,21 +130,6 @@ export function useWebSocket() {
           if (message.type === 'bots_update') {
             console.log('[WebSocket] Bots list updated, invalidating query');
             queryClient.invalidateQueries({ queryKey: ['bots'] });
-          }
-          if (message.type === 'queue_update' && message.data) {
-            const queueData = message.data as { queues?: QueueStatus[]; bot_id?: string };
-            // queues 是数组（全量），bot_id 是旧格式（单个）
-            if (queueData.queues && Array.isArray(queueData.queues)) {
-              // 全量更新：将每个 bot 的状态写入对应 queryKey
-              for (const q of queueData.queues) {
-                if (q.bot_id) {
-                  queryClient.setQueryData(['queue-status', q.bot_id], q);
-                }
-              }
-            } else if (queueData.bot_id) {
-              // 旧格式：仅 invalidate，让组件重新 fetch
-              queryClient.invalidateQueries({ queryKey: ['queue-status', queueData.bot_id] });
-            }
           }
           if (message.type === 'activity_update' && message.entry) {
             const entry = message.entry as ActivityItem;

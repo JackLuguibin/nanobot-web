@@ -198,7 +198,7 @@ export type WSMessageType =
   | 'status_update'
   | 'sessions_update'
   | 'bots_update'
-  | 'queue_update'
+  | 'activity_update'
   | 'subagent_start'
   | 'subagent_done'
   | 'assistant_message';
@@ -207,6 +207,8 @@ export interface WSMessage {
   type: WSMessageType;
   data: unknown;
   session_key?: string;
+  /** Present on `activity_update` push messages. */
+  entry?: ActivityItem;
 }
 
 // Streaming response types
