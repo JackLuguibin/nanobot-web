@@ -20,7 +20,6 @@ from . import (
     health_audit,
     mcp,
     memory,
-    plans,
     sessions,
     skills,
     status,
@@ -48,7 +47,6 @@ api_router.include_router(config.router)
 api_router.include_router(skills.router)
 api_router.include_router(env.router)
 api_router.include_router(cron.router)
-api_router.include_router(plans.router)
 api_router.include_router(control.router)
 api_router.include_router(workspace.router)
 api_router.include_router(activity.router)

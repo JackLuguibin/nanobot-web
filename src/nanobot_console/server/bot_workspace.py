@@ -20,7 +20,6 @@ _CONSOLE_DIR = ".nanobot_console"
 _RUNTIME_STATE_FILE = "runtime_state.json"
 _MEMORY_DIR = "memory"
 _AGENTS_FILE = "agents.json"
-_PLANS_FILE = "plans.json"
 _TOOL_LOGS_FILE = "tool_logs.json"
 _PROFILE_FILES: dict[str, str] = {
     "soul": "SOUL.md",
@@ -184,11 +183,6 @@ def read_memory_text(bot_id: str | None, kind: str) -> str:
 def agents_state_path(bot_id: str | None) -> Path:
     """JSON file backing multi-agent records and categories."""
     return console_state_dir(bot_id) / _AGENTS_FILE
-
-
-def plans_path(bot_id: str | None) -> Path:
-    """JSON file for Kanban / plans board."""
-    return console_state_dir(bot_id) / _PLANS_FILE
 
 
 def tool_logs_path(bot_id: str | None) -> Path:

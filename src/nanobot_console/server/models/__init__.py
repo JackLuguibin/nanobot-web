@@ -47,12 +47,6 @@ from nanobot_console.server.models.errors import ErrorDetail, ErrorResponse
 from nanobot_console.server.models.health import HealthResponse
 from nanobot_console.server.models.health_audit import HealthAuditResponse, HealthIssue
 from nanobot_console.server.models.memory import MemoryResponse
-from nanobot_console.server.models.plans import (
-    PlanBoard,
-    PlanColumn,
-    PlanSaveBody,
-    PlanTask,
-)
 from nanobot_console.server.models.sessions import (
     BatchDeleteBody,
     BatchDeleteFailure,
@@ -130,10 +124,6 @@ __all__ = [
     "OkWithName",
     "OkWithPath",
     "OkWithTopic",
-    "PlanBoard",
-    "PlanColumn",
-    "PlanSaveBody",
-    "PlanTask",
     "RegistrySearchItem",
     "SessionDetail",
     "SessionInfo",
