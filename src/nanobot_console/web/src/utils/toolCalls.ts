@@ -41,8 +41,13 @@ export function normalizeToolCallEntry(
     return null;
   }
   const o = raw as Record<string, unknown>;
+  const rawId = o.id;
   const id =
-    typeof o.id === "string" && o.id.length > 0 ? o.id : `tool-call-${index}`;
+    typeof rawId === "string" && rawId.length > 0
+      ? rawId
+      : typeof rawId === "number" && Number.isFinite(rawId)
+        ? String(rawId)
+        : `tool-call-${index}`;
   let name = "";
   let args: Record<string, unknown> = {};
   const fn = o.function;
@@ -84,4 +89,122 @@ export function normalizeToolCallsArray(raw: unknown): ToolCall[] {
     }
   });
   return out;
+}
+
+function toolResultTextFromUnknown(value: unknown): string | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * Normalize `tool_results` from nanobot WebSocket `tool_event` frames (shapes vary by backend).
+ */
+export function normalizeToolResultItems(raw: unknown): ToolCall[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const byIdLastWins = new Map<string, ToolCall>();
+  raw.forEach((entry, idx) => {
+    if (!entry || typeof entry !== "object") {
+      return;
+    }
+    const o = entry as Record<string, unknown>;
+    const tcId = o.tool_call_id;
+    const tcIdAlt = o.toolCallId;
+    const oid = o.id;
+    let rawId = "";
+    if (typeof tcId === "string" && tcId.length > 0) {
+      rawId = tcId;
+    } else if (typeof tcId === "number" && Number.isFinite(tcId)) {
+      rawId = String(tcId);
+    } else if (typeof tcIdAlt === "string" && tcIdAlt.length > 0) {
+      rawId = tcIdAlt;
+    } else if (typeof tcIdAlt === "number" && Number.isFinite(tcIdAlt)) {
+      rawId = String(tcIdAlt);
+    } else if (typeof oid === "string" && oid.length > 0) {
+      rawId = oid;
+    } else if (typeof oid === "number" && Number.isFinite(oid)) {
+      rawId = String(oid);
+    }
+    const id =
+      rawId.length > 0 ? rawId : `tool-result-${idx}`;
+    let name = typeof o.name === "string" ? o.name : "";
+    const fn = o.function;
+    if (!name && fn && typeof fn === "object" && !Array.isArray(fn)) {
+      const f = fn as Record<string, unknown>;
+      name = typeof f.name === "string" ? f.name : "";
+    }
+    let resultText: string | undefined;
+    if (typeof o.result === "string") {
+      resultText = o.result;
+    } else if (o.result !== undefined) {
+      resultText = toolResultTextFromUnknown(o.result);
+    } else if (typeof o.content === "string") {
+      resultText = o.content;
+    } else if (o.content !== undefined) {
+      resultText = toolResultTextFromUnknown(o.content);
+    }
+    if (resultText === undefined) {
+      return;
+    }
+    const placeholderName = name.length > 0 ? name : "tool";
+    byIdLastWins.set(id, {
+      id,
+      name: placeholderName,
+      arguments: {},
+      result: resultText,
+    });
+  });
+  return Array.from(byIdLastWins.values());
+}
+
+/**
+ * Merge streaming `tool_calls` with `tool_results` updates (by tool call id), preserving call order.
+ */
+export function mergeToolCallsWithResults(
+  calls: ToolCall[],
+  resultUpdates: ToolCall[],
+): ToolCall[] {
+  if (resultUpdates.length === 0) {
+    return calls;
+  }
+  const byId = new Map<string, ToolCall>();
+  const order: string[] = [];
+  for (const c of calls) {
+    if (!byId.has(c.id)) {
+      order.push(c.id);
+    }
+    byId.set(c.id, { ...c });
+  }
+  for (const u of resultUpdates) {
+    if (!byId.has(u.id)) {
+      order.push(u.id);
+    }
+    const existing = byId.get(u.id);
+    if (existing) {
+      const keepArgs =
+        u.arguments && Object.keys(u.arguments).length > 0
+          ? u.arguments
+          : existing.arguments;
+      byId.set(u.id, {
+        ...existing,
+        ...u,
+        name: u.name || existing.name,
+        arguments: keepArgs,
+        result: u.result !== undefined ? u.result : existing.result,
+      });
+    } else {
+      byId.set(u.id, { ...u });
+    }
+  }
+  return order.map((toolId) => byId.get(toolId)!);
 }

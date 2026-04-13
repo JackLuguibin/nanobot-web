@@ -106,7 +106,8 @@ export function useWebSocket() {
 
           // Dispatch chat streaming messages to registered handlers
           const chatTypes = [
-            'chat_token', 'chat_done', 'session_key', 'tool_call',
+            'chat_token', 'chat_done', 'chat_start', 'stream_frame_end',
+            'session_key', 'tool_call',
             'tool_result', 'tool_progress', 'subagent_start',
             'subagent_done', 'assistant_message', 'error',
           ];

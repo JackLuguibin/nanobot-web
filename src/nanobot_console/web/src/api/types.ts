@@ -194,6 +194,9 @@ export interface SkillInfo {
 export type WSMessageType =
   | 'chat_token'
   | 'chat_done'
+  | 'chat_start'
+  /** One streaming segment ended (nanobot `stream_end`); not the full assistant turn. */
+  | 'stream_frame_end'
   | 'session_key'
   | 'tool_call'
   | 'tool_result'
@@ -225,6 +228,8 @@ export interface StreamChunk {
   tool_calls?: ToolCall[];
   /** 模型在发起工具调用前的推理/说明，用于在 UI 中作为调用原因展示 */
   reasoning_content?: string;
+  /** When true, append `reasoning_content` to the current streaming reasoning (nanobot `event: reasoning`). */
+  reasoning_append?: boolean;
   tool_name?: string;
   tool_result?: string;
   error?: string;

@@ -566,6 +566,12 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const isStreamingRef = useRef(false);
+  useEffect(() => {
+    isStreamingRef.current = isStreaming;
+  }, [isStreaming]);
+  /** One assistant reply per user turn; drop duplicate chat_done (e.g. stream_end + chat_end). */
+  const assistantReplyFinalizedRef = useRef(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [sessionsSidebarOpen, setSessionsSidebarOpen] = useState(false);
   const [sessionsSidebarCollapsed, setSessionsSidebarCollapsed] =
@@ -819,6 +825,8 @@ export default function Chat() {
           replace: true,
         });
         queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      } else if (chunk.type === "chat_start") {
+        setIsStreaming(true);
       } else if (chunk.type === "chat_token") {
         const hasText =
           typeof chunk.content === "string" && chunk.content.length > 0;
@@ -843,6 +851,71 @@ export default function Chat() {
         }
         if (hasEmbeddedTools) {
           const incoming = chunk.tool_calls ?? [];
+          if (isStreamingRef.current) {
+            const merged = mergeStreamingToolCalls(
+              streamingPayloadToolCallsRef.current,
+              incoming,
+            );
+            streamingPayloadToolCallsRef.current = merged;
+            setStreamingPayloadToolCalls(merged);
+          } else {
+            /* nanobot may send tool_event after chat_end; merge into last assistant bubble. */
+            streamingPayloadToolCallsRef.current = [];
+            setStreamingPayloadToolCalls([]);
+            setMessages((prev) => {
+              if (prev.length === 0) {
+                return prev;
+              }
+              const lastIdx = prev.length - 1;
+              const last = prev[lastIdx];
+              if (last.role !== "assistant") {
+                return prev;
+              }
+              const mergedCalls = mergeStreamingToolCalls(
+                last.tool_calls ?? [],
+                incoming,
+              );
+              const next = [...prev];
+              next[lastIdx] = { ...last, tool_calls: mergedCalls };
+              return next;
+            });
+            queryClient.setQueryData(
+              ["session", activeSessionKey, currentBotId],
+              (old: typeof sessionData | undefined) => {
+                if (!old?.messages?.length) {
+                  return old;
+                }
+                const msgs = [...(old.messages ?? [])];
+                const li = msgs.length - 1;
+                const last = msgs[li] as Message | undefined;
+                if (!last || last.role !== "assistant") {
+                  return old;
+                }
+                const mergedCalls = mergeStreamingToolCalls(
+                  last.tool_calls ?? [],
+                  incoming,
+                );
+                msgs[li] = { ...last, tool_calls: mergedCalls };
+                return { ...old, messages: msgs };
+              },
+            );
+          }
+        }
+        if (hasReasoning) {
+          const r = chunk.reasoning_content ?? "";
+          if (chunk.reasoning_append) {
+            const merged = streamingReasoningContentRef.current + r;
+            streamingReasoningContentRef.current = merged;
+            setStreamingReasoningContent(merged);
+          } else {
+            streamingReasoningContentRef.current = r;
+            setStreamingReasoningContent(r);
+          }
+        }
+      } else if (chunk.type === "stream_frame_end") {
+        cancelStreamTokenFlush();
+        if (chunk.tool_calls?.length) {
+          const incoming = chunk.tool_calls;
           const merged = mergeStreamingToolCalls(
             streamingPayloadToolCallsRef.current,
             incoming,
@@ -850,9 +923,9 @@ export default function Chat() {
           streamingPayloadToolCallsRef.current = merged;
           setStreamingPayloadToolCalls(merged);
         }
-        if (hasReasoning) {
-          streamingReasoningContentRef.current = chunk.reasoning_content ?? "";
-          setStreamingReasoningContent(chunk.reasoning_content ?? "");
+        if (chunk.reasoning_content !== undefined) {
+          streamingReasoningContentRef.current = chunk.reasoning_content;
+          setStreamingReasoningContent(chunk.reasoning_content);
         }
       } else if (chunk.type === "tool_progress" && chunk.content) {
         setStreamingToolProgress((prev) => [...prev, chunk.content as string]);
@@ -929,6 +1002,10 @@ export default function Chat() {
           ),
         );
       } else if (chunk.type === "chat_done") {
+        if (assistantReplyFinalizedRef.current) {
+          return;
+        }
+        assistantReplyFinalizedRef.current = true;
         cancelStreamTokenFlush();
         const refTools = streamingPayloadToolCallsRef.current;
         const refReason = streamingReasoningContentRef.current;
@@ -1065,6 +1142,7 @@ export default function Chat() {
     ]);
 
     cancelStreamTokenFlush();
+    assistantReplyFinalizedRef.current = false;
     setIsStreaming(true);
     setStreamingContent("");
     streamingContentRef.current = "";
@@ -1231,6 +1309,14 @@ export default function Chat() {
       return "";
     }
   };
+
+  /** nanobot may emit `stream_end` before the last `tool_event`; keep bubble while tools still stream in. */
+  const showStreamingAssistantBubble =
+    isStreaming &&
+    (Boolean(streamingContent) ||
+      streamingToolProgress.length > 0 ||
+      streamingPayloadToolCalls.length > 0 ||
+      streamingReasoningContent.length > 0);
 
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden overflow-x-hidden bg-gradient-to-br from-gray-50 via-white to-gray-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 relative">
@@ -1437,22 +1523,27 @@ export default function Chat() {
                       {msg.role === "assistant" && msg.reasoning_content ? (
                         <MessageThinkingBlock text={msg.reasoning_content} />
                       ) : null}
+                      {msg.role === "assistant" ? (
+                        <MessageToolCallsBlock
+                          noTopMargin={!msg.reasoning_content}
+                          tool_calls={msg.tool_calls}
+                        />
+                      ) : null}
                       <div
                         className={`prose prose-sm max-w-none ${
                           msg.role === "user"
                             ? "prose-slate dark:prose-invert"
                             : "dark:prose-invert"
                         } ${
-                          msg.role === "assistant" && msg.reasoning_content
+                          msg.role === "assistant" &&
+                          (msg.reasoning_content ||
+                            (msg.tool_calls?.length ?? 0) > 0)
                             ? "mt-3 pt-3 border-t border-gray-100 dark:border-gray-700"
                             : ""
                         }`}
                       >
                         <Markdown>{msg.content}</Markdown>
                       </div>
-                      {msg.role === "assistant" ? (
-                        <MessageToolCallsBlock tool_calls={msg.tool_calls} />
-                      ) : null}
                       {(msg.created_at ?? msg.timestamp) && (
                         <div
                           className={`mt-2 text-xs ${
@@ -1469,11 +1560,7 @@ export default function Chat() {
                 ))}
 
                 {/* Streaming content */}
-                {isStreaming &&
-                  (streamingContent ||
-                    streamingToolProgress.length > 0 ||
-                    streamingPayloadToolCalls.length > 0 ||
-                    streamingReasoningContent.length > 0) && (
+                {showStreamingAssistantBubble && (
                     <>
                       <div className="flex gap-3 w-full min-w-0">
                         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 flex items-center justify-center shrink-0">
@@ -1485,21 +1572,9 @@ export default function Chat() {
                               text={streamingReasoningContent}
                             />
                           ) : null}
-                          {streamingContent ? (
-                            <div
-                              className={`text-[15px] leading-relaxed text-gray-900 dark:text-gray-100 whitespace-pre-wrap break-words ${
-                                streamingReasoningContent.length > 0
-                                  ? "mt-3 pt-3 border-t border-gray-100 dark:border-gray-700"
-                                  : ""
-                              }`}
-                            >
-                              {streamingContent}
-                            </div>
-                          ) : null}
                           {streamingPayloadToolCalls.length > 0 ? (
                             <div
                               className={
-                                streamingContent ||
                                 streamingReasoningContent.length > 0
                                   ? "mt-3 pt-3 border-t border-gray-100 dark:border-gray-700"
                                   : ""
@@ -1509,6 +1584,18 @@ export default function Chat() {
                                 noTopMargin
                                 tool_calls={streamingPayloadToolCalls}
                               />
+                            </div>
+                          ) : null}
+                          {streamingContent ? (
+                            <div
+                              className={`text-[15px] leading-relaxed text-gray-900 dark:text-gray-100 whitespace-pre-wrap break-words ${
+                                streamingReasoningContent.length > 0 ||
+                                streamingPayloadToolCalls.length > 0
+                                  ? "mt-3 pt-3 border-t border-gray-100 dark:border-gray-700"
+                                  : ""
+                              }`}
+                            >
+                              {streamingContent}
                             </div>
                           ) : null}
                           {streamingToolProgress.length > 0 ? (

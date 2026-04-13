@@ -18,6 +18,9 @@ interface Toast {
   duration?: number;
 }
 
+/** Ring-buffer cap for WebSocket debug panes (Console /ws + Nanobot channel); prevents unbounded memory. */
+const WS_DEBUG_MAX_STORED_MESSAGES = 5000;
+
 const getInitialTheme = (): Theme => {
   const stored = localStorage.getItem('nanobot-theme') as Theme | null;
   if (stored) return stored;
@@ -69,6 +72,8 @@ interface AppState {
   /** True while the socket is opening or handshaking (not yet OPEN). */
   wsConnecting: boolean;
   wsMessages: WSMessage[];
+  /** Raw frames from nanobot `/nanobot-ws` (chat streaming channel); for debug UI only. */
+  nanobotWsDebugLines: { ts: number; body: string }[];
 
   /** Nanobot built-in channel WS (Chat `/nanobot-ws`); for header when console push is off. */
   agentWsLinked: boolean;
@@ -97,6 +102,8 @@ interface AppState {
   setWSConnecting: (connecting: boolean) => void;
   addWSMessage: (message: WSMessage) => void;
   clearWSMessages: () => void;
+  addNanobotWsDebugLine: (body: string) => void;
+  clearNanobotWsDebug: () => void;
 
   setAgentWsLinked: (linked: boolean) => void;
   setAgentWsReady: (ready: boolean) => void;
@@ -125,6 +132,7 @@ export const useAppStore = create<AppState>((set) => ({
   wsConnected: false,
   wsConnecting: false,
   wsMessages: [],
+  nanobotWsDebugLines: [],
 
   agentWsLinked: false,
   agentWsReady: false,
@@ -174,10 +182,28 @@ export const useAppStore = create<AppState>((set) => ({
   setWSConnected: (connected) => set({ wsConnected: connected }),
   setWSConnecting: (connecting) => set({ wsConnecting: connecting }),
   addWSMessage: (message) =>
-    set((state) => ({
-      wsMessages: [...state.wsMessages.slice(-99), message],
-    })),
+    set((state) => {
+      const next = [...state.wsMessages, message];
+      return {
+        wsMessages:
+          next.length > WS_DEBUG_MAX_STORED_MESSAGES
+            ? next.slice(-WS_DEBUG_MAX_STORED_MESSAGES)
+            : next,
+      };
+    }),
   clearWSMessages: () => set({ wsMessages: [] }),
+  addNanobotWsDebugLine: (body) =>
+    set((state) => {
+      const line = { ts: Date.now(), body: body.slice(0, 8000) };
+      const next = [...state.nanobotWsDebugLines, line];
+      return {
+        nanobotWsDebugLines:
+          next.length > WS_DEBUG_MAX_STORED_MESSAGES
+            ? next.slice(-WS_DEBUG_MAX_STORED_MESSAGES)
+            : next,
+      };
+    }),
+  clearNanobotWsDebug: () => set({ nanobotWsDebugLines: [] }),
 
   setAgentWsLinked: (linked) => set({ agentWsLinked: linked }),
   setAgentWsReady: (ready) => set({ agentWsReady: ready }),

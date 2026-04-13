@@ -2,13 +2,26 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { StreamChunk } from "../api/types";
 import { useAppStore } from "../store";
-import { normalizeToolCallsArray } from "../utils/toolCalls";
+import {
+  mergeToolCallsWithResults,
+  normalizeToolCallsArray,
+  normalizeToolResultItems,
+} from "../utils/toolCalls";
 
 import { dispatchChatChunk } from "./useWebSocket";
 
 /** Frames from `nanobot.channels.websocket` (WebSocketChannel). */
 export interface NanobotNativeWsFrame {
-  event: "ready" | "message" | "delta" | "stream_end" | string;
+  event:
+    | "ready"
+    | "message"
+    | "delta"
+    | "stream_end"
+    | "chat_start"
+    | "chat_end"
+    | "tool_event"
+    | "reasoning"
+    | string;
   text?: string;
   chat_id?: string;
   client_id?: string;
@@ -36,6 +49,11 @@ function optionalToolFrameFields(
   return chunk;
 }
 
+/**
+ * Maps nanobot WS frames to StreamChunk.
+ * `stream_end` = one streaming segment/frame finished (`stream_frame_end`).
+ * `chat_end` = full assistant turn finished (`chat_done`).
+ */
 function mapNativeFrameToStreamChunk(
   data: Record<string, unknown>,
 ): StreamChunk | null {
@@ -51,6 +69,18 @@ function mapNativeFrameToStreamChunk(
     }
     return { type: "chat_token", content: text, ...extra };
   }
+  if (ev === "reasoning") {
+    const text = typeof data.text === "string" ? data.text : "";
+    if (!text) {
+      return null;
+    }
+    return {
+      type: "chat_token",
+      content: "",
+      reasoning_content: text,
+      reasoning_append: true,
+    };
+  }
   if (ev === "message") {
     const text = typeof data.text === "string" ? data.text : "";
     const extra = optionalToolFrameFields(data);
@@ -58,7 +88,34 @@ function mapNativeFrameToStreamChunk(
   }
   if (ev === "stream_end") {
     const extra = optionalToolFrameFields(data);
+    return { type: "stream_frame_end", ...extra };
+  }
+  if (ev === "chat_start") {
+    return { type: "chat_start" };
+  }
+  if (ev === "chat_end") {
+    const extra = optionalToolFrameFields(data);
     return { type: "chat_done", content: "", ...extra };
+  }
+  if (ev === "tool_event") {
+    const mergedTools = mergeToolCallsWithResults(
+      normalizeToolCallsArray(data.tool_calls),
+      normalizeToolResultItems(data.tool_results),
+    );
+    const synthetic: Record<string, unknown> = {
+      ...data,
+      tool_calls: mergedTools,
+    };
+    const text = typeof data.text === "string" ? data.text : "";
+    const extra = optionalToolFrameFields(synthetic);
+    if (
+      text === "" &&
+      !extra.tool_calls &&
+      extra.reasoning_content === undefined
+    ) {
+      return null;
+    }
+    return { type: "chat_token", content: text, ...extra };
   }
   return null;
 }
@@ -168,6 +225,9 @@ export function useNanobotChannelWebSocket(options: {
         };
 
         ws.onmessage = (event: MessageEvent<string>) => {
+          const raw =
+            typeof event.data === "string" ? event.data : String(event.data);
+          useAppStore.getState().addNanobotWsDebugLine(raw);
           try {
             if (myGen !== connectGeneration) {
               return;
@@ -257,7 +317,9 @@ export function useNanobotChannelWebSocket(options: {
       if (chatId) {
         body.chat_id = chatId;
       }
-      ws.send(JSON.stringify(body));
+      const outbound = JSON.stringify(body);
+      useAppStore.getState().addNanobotWsDebugLine(`[out] ${outbound}`);
+      ws.send(outbound);
     },
     [],
   );
