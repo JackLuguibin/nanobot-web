@@ -64,9 +64,17 @@ interface AppState {
   // Toast notifications
   toasts: Toast[];
 
-  // WebSocket
+  // WebSocket (console push via VITE_CONSOLE_WS_URL)
   wsConnected: boolean;
+  /** True while the socket is opening or handshaking (not yet OPEN). */
+  wsConnecting: boolean;
   wsMessages: WSMessage[];
+
+  /** Nanobot built-in channel WS (Chat `/nanobot-ws`); for header when console push is off. */
+  agentWsLinked: boolean;
+  agentWsReady: boolean;
+  /** Server-issued id from nanobot `ready` frame; tied to the active `/nanobot-ws` connection (per session `client_id`). */
+  nanobotChatId: string | null;
 
   // Actions
   setSidebarCollapsed: (collapsed: boolean) => void;
@@ -86,8 +94,13 @@ interface AppState {
   removeToast: (id: string) => void;
 
   setWSConnected: (connected: boolean) => void;
+  setWSConnecting: (connecting: boolean) => void;
   addWSMessage: (message: WSMessage) => void;
   clearWSMessages: () => void;
+
+  setAgentWsLinked: (linked: boolean) => void;
+  setAgentWsReady: (ready: boolean) => void;
+  setNanobotChatId: (chatId: string | null) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -110,7 +123,12 @@ export const useAppStore = create<AppState>((set) => ({
 
   // WebSocket
   wsConnected: false,
+  wsConnecting: false,
   wsMessages: [],
+
+  agentWsLinked: false,
+  agentWsReady: false,
+  nanobotChatId: null,
 
   // Actions
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
@@ -122,7 +140,7 @@ export const useAppStore = create<AppState>((set) => ({
   setCurrentSessionKey: (key) => set({ currentSessionKey: key }),
   setCurrentBotId: (botId) => {
     localStorage.setItem('nanobot-current-bot-id', botId || '');
-    set({ currentBotId: botId, currentSessionKey: null });
+    set({ currentBotId: botId, currentSessionKey: null, nanobotChatId: null });
   },
 
   setStatus: (status) => set({ status }),
@@ -154,9 +172,14 @@ export const useAppStore = create<AppState>((set) => ({
     })),
 
   setWSConnected: (connected) => set({ wsConnected: connected }),
+  setWSConnecting: (connecting) => set({ wsConnecting: connecting }),
   addWSMessage: (message) =>
     set((state) => ({
       wsMessages: [...state.wsMessages.slice(-99), message],
     })),
   clearWSMessages: () => set({ wsMessages: [] }),
+
+  setAgentWsLinked: (linked) => set({ agentWsLinked: linked }),
+  setAgentWsReady: (ready) => set({ agentWsReady: ready }),
+  setNanobotChatId: (chatId) => set({ nanobotChatId: chatId }),
 }));

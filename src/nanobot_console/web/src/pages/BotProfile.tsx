@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Spin, Empty, Card, Select, Button, Input } from 'antd';
 import { EditOutlined, SaveOutlined, CloseOutlined } from '@ant-design/icons';
-import ReactMarkdown from 'react-markdown';
+import { Markdown } from '../components/Markdown';
 import * as api from '../api/client';
 import { useAppStore } from '../store';
 import type { BotFilesResponse } from '../api/types';
@@ -179,7 +179,7 @@ export default function BotProfile() {
           ) : activeContent ? (
             <div className="max-w-3xl">
               <div className={PROSE_CLASS}>
-                <ReactMarkdown>{activeContent}</ReactMarkdown>
+                <Markdown>{activeContent}</Markdown>
               </div>
             </div>
           ) : (

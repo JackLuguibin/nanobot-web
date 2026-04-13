@@ -42,6 +42,10 @@ export interface ToolCall {
   id: string;
   name: string;
   arguments: Record<string, unknown>;
+  /** OpenAI-style top-level `type`, e.g. `"function"`. */
+  tool_call_type?: string;
+  /** Filled from a later `role: tool` message with matching `tool_call_id`. */
+  result?: string;
 }
 
 export interface SessionInfo {
@@ -217,6 +221,10 @@ export interface StreamChunk {
   content?: string;
   session_key?: string;
   tool_call?: ToolCall;
+  /** 与 HTTP ChatResponse 一致：一次回复中的多段工具调用（如 nanobot WebSocket 帧内嵌） */
+  tool_calls?: ToolCall[];
+  /** 模型在发起工具调用前的推理/说明，用于在 UI 中作为调用原因展示 */
+  reasoning_content?: string;
   tool_name?: string;
   tool_result?: string;
   error?: string;

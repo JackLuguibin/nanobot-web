@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Spin, Empty, Card, Select } from 'antd';
-import ReactMarkdown from 'react-markdown';
+import { Markdown } from '../components/Markdown';
 import * as api from '../api/client';
 import { useAppStore } from '../store';
 
@@ -108,7 +108,7 @@ export default function Memory() {
                   prose-a:text-primary-600 dark:prose-a:text-primary-400 prose-a:no-underline hover:prose-a:underline
                 "
               >
-                <ReactMarkdown>{longTermContent}</ReactMarkdown>
+                <Markdown>{longTermContent}</Markdown>
               </div>
             </div>
           ) : (

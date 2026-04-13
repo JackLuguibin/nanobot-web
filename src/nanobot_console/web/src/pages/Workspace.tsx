@@ -17,7 +17,7 @@ import {
   CloseOutlined,
 } from '@ant-design/icons';
 import type { DataNode } from 'antd/es/tree';
-import ReactMarkdown from 'react-markdown';
+import { Markdown } from '../components/Markdown';
 import * as api from '../api/client';
 import { useAppStore } from '../store';
 
@@ -239,7 +239,7 @@ export default function Workspace() {
           ) : viewMode === 'preview' && isMarkdown ? (
             <div className="w-full">
               <div className={PROSE_CLASS}>
-                <ReactMarkdown>{fileData?.content ?? ''}</ReactMarkdown>
+                <Markdown>{fileData?.content ?? ''}</Markdown>
               </div>
             </div>
           ) : viewMode === 'preview' && !isMarkdown ? (

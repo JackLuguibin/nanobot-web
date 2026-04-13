@@ -1,6 +1,6 @@
 # nanobot-web
 
-WebSocket channel plugin for [nanobot-ai](https://github.com/your-repo/nanobot-ai).
+Console and tooling for [nanobot-ai](https://github.com/HKUDS/nanobot). Chat streaming uses the **built-in** WebSocket channel (`nanobot.channels.websocket`), not a separate plugin.
 
 ## Installation
 
@@ -8,58 +8,68 @@ WebSocket channel plugin for [nanobot-ai](https://github.com/your-repo/nanobot-a
 pip install -e .
 ```
 
-> Requires `nanobot-ai >= 0.1.4.post6` to already be installed.
+> Requires `nanobot-ai` (see `pyproject.toml`).
 
-## Configuration
+## WebSocket channel (nanobot)
 
-Add the following to your `~/.nanobot/config.json` channels section:
+Enable the channel in `~/.nanobot/config.json` under `channels` using the key **`websocket`** (the module name in `nanobot-ai`):
 
 ```json
 {
   "channels": {
-    "ws": {
+    "websocket": {
       "enabled": true,
       "host": "0.0.0.0",
       "port": 8765,
-      "allowFrom": [],
-      "maxConnections": 100,
-      "streaming": false
+      "path": "/",
+      "allowFrom": ["*"],
+      "streaming": true,
+      "websocketRequiresToken": false
     }
   }
 }
 ```
 
-| Field            | Type       | Default   | Description                                          |
-|------------------|------------|-----------|------------------------------------------------------|
-| `enabled`        | `bool`     | `false`   | Enable the WebSocket channel                        |
-| `host`           | `string`   | `0.0.0.0` | Bind address                                        |
-| `port`           | `int`      | `8765`    | WebSocket server port                               |
-| `allowFrom`      | `list[str]`| `[]`      | Allowed chat IDs (empty = allow all, `["*"]` = all) |
-| `maxConnections` | `int`      | `100`     | Max concurrent WebSocket connections                |
-| `streaming`      | `bool`     | `false`   | Enable streaming responses                           |
+For local development, set **`websocketRequiresToken`** to `false` unless you configure a static `token` or `tokenIssuePath` / issued tokens. If `true` (the upstream default), the handshake must include a valid `token` query parameter.
 
-## Client Usage
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | `bool` | `false` | Enable the WebSocket server channel |
+| `host` | `string` | `127.0.0.1` | Bind address |
+| `port` | `int` | `8765` | Listen port |
+| `path` | `string` | `"/"` | HTTP path for the WebSocket upgrade |
+| `allowFrom` | `list[str]` | `["*"]` | Allowed `client_id` values (`["*"]` allows all) |
+| `streaming` | `bool` | `true` | Streaming deltas via `send_delta` |
+| `websocketRequiresToken` | `bool` | `true` | Require `token` query param on connect when no static `token` is set |
+| `token` | `string` | `""` | Optional static shared secret for `?token=` |
+| `tokenIssuePath` | `string` | `""` | Optional HTTP path that issues short-lived tokens (see upstream docs) |
 
-Connect to `ws://<host>:<port>/<chat_id>`. The URL path is used as the `chat_id`.
+Empty `allowFrom` denies everyone; use `["*"]` or list specific client IDs.
 
-Send JSON messages:
+## Client usage
+
+Connect to:
+
+`ws://<host>:<port><path>?client_id=<id>&token=<optional>`
+
+The server sends a first frame:
 
 ```json
-{"type": "message", "content": "Hello nanobot!"}
+{"event": "ready", "chat_id": "<uuid>", "client_id": "..."}
 ```
 
-Receive responses as:
+Send a user message as JSON with a text field the server accepts, for example:
 
 ```json
-{"type": "message", "content": "Hello! How can I help?"}
+{"content": "Hello nanobot!"}
 ```
 
-Ping/pong is also supported:
+Receive streaming and final text as:
 
 ```json
-{"type": "ping"}
-// Server responds:
-{"type": "pong"}
+{"event": "delta", "text": "..."}
+{"event": "message", "text": "..."}
+{"event": "stream_end"}
 ```
 
 ## Development

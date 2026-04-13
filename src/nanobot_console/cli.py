@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +12,7 @@ import uvicorn
 
 from nanobot_console.server.app import create_app
 from nanobot_console.server.config import get_settings
+from nanobot_console.web_dev_wait import wait_for_dev_stack
 
 
 def _web_root() -> Path:
@@ -69,9 +71,17 @@ def main() -> None:
         help="Frontend: Vite dev server or production build.",
     )
     web_sub = web_parser.add_subparsers(dest="web_action", required=True)
-    web_sub.add_parser(
+    dev_parser = web_sub.add_parser(
         "dev",
         help="Development: start Vite with HMR (npm run dev).",
+    )
+    dev_parser.add_argument(
+        "--no-wait",
+        action="store_true",
+        help=(
+            "Do not wait for the console API / nanobot WebSocket before Vite "
+            "(same as SKIP_GATEWAY_WAIT=1)."
+        ),
     )
     web_sub.add_parser(
         "build",
@@ -82,6 +92,12 @@ def main() -> None:
     if args.command == "server":
         _run_server()
     elif args.command == "web":
+        if (
+            args.web_action == "dev"
+            and not getattr(args, "no_wait", False)
+            and not os.environ.get("SKIP_GATEWAY_WAIT")
+        ):
+            wait_for_dev_stack()
         _run_npm_web(args.web_action)
     else:
         parser.print_help()

@@ -15,7 +15,7 @@ import {
   Switch,
 } from 'antd';
 import { ReadOutlined, EditOutlined, DeleteOutlined, PlusOutlined, EyeOutlined } from '@ant-design/icons';
-import ReactMarkdown from 'react-markdown';
+import { Markdown } from '../components/Markdown';
 import * as api from '../api/client';
 import { useAppStore } from '../store';
 
@@ -498,7 +498,7 @@ export default function Skills() {
               </pre>
             ) : (
               <div className="p-4 prose prose-slate dark:prose-invert prose-sm max-w-none">
-                <ReactMarkdown>{skillViewModal.content}</ReactMarkdown>
+                <Markdown>{skillViewModal.content}</Markdown>
               </div>
             )}
           </div>

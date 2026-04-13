@@ -1,39 +1,69 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { StreamChunk } from "../api/types";
+import { useAppStore } from "../store";
+import { normalizeToolCallsArray } from "../utils/toolCalls";
 
 import { dispatchChatChunk } from "./useWebSocket";
 
-/** Outbound JSON from `nanobot_ext.channels.ws` (OutboundPayload). */
-export interface NanobotOutboundPayload {
-  type: "message" | "delta" | "end" | "error" | "pong";
-  content?: string;
+/** Frames from `nanobot.channels.websocket` (WebSocketChannel). */
+export interface NanobotNativeWsFrame {
+  event: "ready" | "message" | "delta" | "stream_end" | string;
+  text?: string;
+  chat_id?: string;
+  client_id?: string;
   media?: string[];
-  metadata?: Record<string, unknown>;
+  reply_to?: string;
+  stream_id?: unknown;
+  tool_calls?: unknown;
+  reasoning_content?: string;
 }
 
-function mapPayloadToStreamChunk(
-  payload: NanobotOutboundPayload,
+function optionalToolFrameFields(
+  data: Record<string, unknown>,
+): Pick<StreamChunk, "tool_calls" | "reasoning_content"> {
+  const normalized = normalizeToolCallsArray(data.tool_calls);
+  const tool_calls = normalized.length > 0 ? normalized : undefined;
+  const rc = data.reasoning_content;
+  const reasoning_content = typeof rc === "string" ? rc : undefined;
+  const chunk: Pick<StreamChunk, "tool_calls" | "reasoning_content"> = {};
+  if (tool_calls) {
+    chunk.tool_calls = tool_calls;
+  }
+  if (reasoning_content !== undefined) {
+    chunk.reasoning_content = reasoning_content;
+  }
+  return chunk;
+}
+
+function mapNativeFrameToStreamChunk(
+  data: Record<string, unknown>,
 ): StreamChunk | null {
-  if (payload.type === "pong") {
+  const ev = data.event;
+  if (ev === "ready") {
     return null;
   }
-  if (payload.type === "error") {
-    return { type: "error", error: payload.content || "Unknown error" };
+  if (ev === "delta") {
+    const text = typeof data.text === "string" ? data.text : "";
+    const extra = optionalToolFrameFields(data);
+    if (!text && !extra.tool_calls && extra.reasoning_content === undefined) {
+      return null;
+    }
+    return { type: "chat_token", content: text, ...extra };
   }
-  if (payload.type === "delta") {
-    return { type: "chat_token", content: payload.content || "" };
+  if (ev === "message") {
+    const text = typeof data.text === "string" ? data.text : "";
+    const extra = optionalToolFrameFields(data);
+    return { type: "chat_done", content: text, ...extra };
   }
-  if (payload.type === "end") {
-    return { type: "chat_done", content: payload.content };
-  }
-  if (payload.type === "message") {
-    return { type: "chat_done", content: payload.content || "" };
+  if (ev === "stream_end") {
+    const extra = optionalToolFrameFields(data);
+    return { type: "chat_done", content: "", ...extra };
   }
   return null;
 }
 
-/** 未设置 env 时默认 `/nanobot-ws`（由 Vite 代理到 nanobot `ws` 插件）。设为空字符串可关闭。 */
+/** Default `/nanobot-ws` proxies to nanobot built-in `websocket` channel. Empty string disables. */
 export function resolveNanobotWsBase(): string {
   const raw = import.meta.env.VITE_NANOBOT_WS_BASE;
   if (raw === undefined) {
@@ -42,19 +72,22 @@ export function resolveNanobotWsBase(): string {
   return String(raw).trim();
 }
 
-/** Build `ws:` / `wss:` URL for the nanobot channel plugin (path = chat_id). */
+/** Build `ws:` / `wss:` URL with `client_id` query (nanobot native handshake). */
 export function buildNanobotChannelWsUrl(sessionKey: string): string {
   const trimmed = resolveNanobotWsBase();
   if (!trimmed) {
     return "";
   }
-  const pathSeg = `/${encodeURIComponent(sessionKey)}`;
+  const query = `client_id=${encodeURIComponent(sessionKey)}`;
   if (trimmed.startsWith("ws://") || trimmed.startsWith("wss://")) {
-    return `${trimmed.replace(/\/$/, "")}${pathSeg}`;
+    const base = trimmed.replace(/\/$/, "");
+    const sep = base.includes("?") ? "&" : "?";
+    return `${base}${sep}${query}`;
   }
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   const path = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-  return `${proto}//${window.location.host}${path.replace(/\/$/, "")}${pathSeg}`;
+  const pathNorm = path.replace(/\/$/, "");
+  return `${proto}//${window.location.host}${pathNorm}/?${query}`;
 }
 
 export function useNanobotChannelWebSocket(options: {
@@ -66,6 +99,12 @@ export function useNanobotChannelWebSocket(options: {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const isConnectingRef = useRef(false);
+  const setAgentWsReady = useAppStore((s) => s.setAgentWsReady);
+  const setNanobotChatId = useAppStore((s) => s.setNanobotChatId);
+
+  useEffect(() => {
+    setAgentWsReady(ready);
+  }, [ready, setAgentWsReady]);
 
   const clearReconnect = () => {
     if (reconnectTimeoutRef.current !== null) {
@@ -76,7 +115,10 @@ export function useNanobotChannelWebSocket(options: {
 
   useEffect(() => {
     const base = resolveNanobotWsBase();
+    const setAgentWsLinked = useAppStore.getState().setAgentWsLinked;
     if (!enabled || !sessionKey || !base) {
+      setAgentWsLinked(false);
+      setNanobotChatId(null);
       clearReconnect();
       setReady(false);
       if (wsRef.current) {
@@ -88,8 +130,13 @@ export function useNanobotChannelWebSocket(options: {
 
     const url = buildNanobotChannelWsUrl(sessionKey);
     if (!url) {
+      setAgentWsLinked(false);
+      setNanobotChatId(null);
       return;
     }
+
+    setAgentWsLinked(true);
+    setNanobotChatId(null);
 
     let cancelled = false;
     /** 每次 effect 清理或发起新连接时递增；旧 socket 的 onclose 若代数不一致则不重连 */
@@ -116,14 +163,32 @@ export function useNanobotChannelWebSocket(options: {
             return;
           }
           isConnectingRef.current = false;
-          setReady(true);
-          console.log("[nanobot-ws] connected", url);
+          // Ready for UI/send only after server `{ event: "ready", chat_id }` (registers route).
+          console.log("[nanobot-ws] socket open, awaiting ready", url);
         };
 
         ws.onmessage = (event: MessageEvent<string>) => {
           try {
-            const payload = JSON.parse(event.data) as NanobotOutboundPayload;
-            const chunk = mapPayloadToStreamChunk(payload);
+            if (myGen !== connectGeneration) {
+              return;
+            }
+            const data = JSON.parse(event.data) as Record<string, unknown>;
+            const ev = data.event;
+            if (ev === "ready") {
+              const rawId = data.chat_id;
+              const cid =
+                typeof rawId === "string" && rawId.trim().length > 0
+                  ? rawId.trim()
+                  : null;
+              if (cancelled || myGen !== connectGeneration) {
+                return;
+              }
+              setNanobotChatId(cid);
+              setReady(true);
+              console.log("[nanobot-ws] ready", url, cid ?? "");
+              return;
+            }
+            const chunk = mapNativeFrameToStreamChunk(data);
             if (chunk) {
               dispatchChatChunk(chunk);
             }
@@ -137,6 +202,7 @@ export function useNanobotChannelWebSocket(options: {
           if (myGen !== connectGeneration) {
             return;
           }
+          setNanobotChatId(null);
           setReady(false);
           wsRef.current = null;
           if (cancelled) {
@@ -163,13 +229,15 @@ export function useNanobotChannelWebSocket(options: {
       connectGeneration += 1;
       clearReconnect();
       isConnectingRef.current = false;
+      useAppStore.getState().setAgentWsLinked(false);
+      useAppStore.getState().setNanobotChatId(null);
       setReady(false);
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
       }
     };
-  }, [enabled, sessionKey]);
+  }, [enabled, sessionKey, setNanobotChatId]);
 
   const sendMessage = useCallback(
     (payload: { content: string; botId: string | null; sessionKeyOverride: string }) => {
@@ -177,18 +245,19 @@ export function useNanobotChannelWebSocket(options: {
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         throw new Error("nanobot WebSocket not connected");
       }
-      ws.send(
-        JSON.stringify({
-          type: "message",
-          content: payload.content,
-          sender_id: "web-console",
-          session_key: payload.sessionKeyOverride,
-          metadata: {
-            bot_id: payload.botId,
-            source: "nanobot_console",
-          },
-        }),
-      );
+      const chatId = useAppStore.getState().nanobotChatId;
+      const body: Record<string, unknown> = {
+        content: payload.content,
+        session_key: payload.sessionKeyOverride,
+        metadata: {
+          bot_id: payload.botId,
+          source: "nanobot_console",
+        },
+      };
+      if (chatId) {
+        body.chat_id = chatId;
+      }
+      ws.send(JSON.stringify(body));
     },
     [],
   );

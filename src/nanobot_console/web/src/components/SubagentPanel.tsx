@@ -9,7 +9,7 @@ import {
   MinusOutlined,
   PlusOutlined,
 } from '@ant-design/icons';
-import ReactMarkdown from 'react-markdown';
+import { Markdown } from './Markdown';
 
 const { Panel } = Collapse;
 const { Text } = Typography;
@@ -211,7 +211,7 @@ export function SubagentPanel({ tasks, collapsed = false, onCollapse }: Subagent
                           执行结果
                         </Text>
                         <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-2 text-xs max-h-60 overflow-y-auto">
-                          <ReactMarkdown>{task.result}</ReactMarkdown>
+                          <Markdown>{task.result}</Markdown>
                         </div>
                       </div>
                     )}

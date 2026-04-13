@@ -44,13 +44,19 @@ function resolveConsoleWsUrl(): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+/** Whether console real-time push is configured (see `VITE_CONSOLE_WS_URL`). */
+export function isConsoleWebSocketConfigured(): boolean {
+  return resolveConsoleWsUrl() !== null;
+}
+
 export function useWebSocket() {
   const queryClient = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const isConnectingRef = useRef(false);
   const initialStatusReceivedRef = useRef(false);
-  const { setWSConnected, setStatus, setSessions, addWSMessage } = useAppStore();
+  const { setWSConnected, setWSConnecting, setStatus, setSessions, addWSMessage } =
+    useAppStore();
 
   const connect = useCallback(() => {
     // Prevent multiple concurrent connections
@@ -64,10 +70,13 @@ export function useWebSocket() {
       console.log(
         "[WebSocket] Console push disabled (set VITE_CONSOLE_WS_URL to enable)",
       );
+      setWSConnecting(false);
+      setWSConnected(false);
       return;
     }
 
     isConnectingRef.current = true;
+    setWSConnecting(true);
 
     console.log("[WebSocket] Connecting to:", wsUrl);
 
@@ -79,6 +88,7 @@ export function useWebSocket() {
       ws.onopen = () => {
         console.log('[WebSocket] Connected!');
         isConnectingRef.current = false;
+        setWSConnecting(false);
         setWSConnected(true);
         const botId = useAppStore.getState().currentBotId;
         if (botId) {
@@ -153,6 +163,7 @@ export function useWebSocket() {
       ws.onclose = (event) => {
         console.log('[WebSocket] Closed:', event.code, event.reason);
         isConnectingRef.current = false;
+        setWSConnecting(false);
         setWSConnected(false);
         wsRef.current = null;
 
@@ -169,17 +180,26 @@ export function useWebSocket() {
       ws.onerror = (error) => {
         console.error('[WebSocket] Error:', error);
         isConnectingRef.current = false;
+        setWSConnecting(false);
       };
     } catch (e) {
       console.error('[WebSocket] Creation error:', e);
       isConnectingRef.current = false;
+      setWSConnecting(false);
 
       // Schedule retry
       reconnectTimeoutRef.current = window.setTimeout(() => {
         connect();
       }, 5000);
     }
-  }, [queryClient, setWSConnected, setStatus, setSessions, addWSMessage]);
+  }, [
+    queryClient,
+    setWSConnected,
+    setWSConnecting,
+    setStatus,
+    setSessions,
+    addWSMessage,
+  ]);
 
   useEffect(() => {
     console.log('[WebSocket] Mounted, connecting...');

@@ -1,10 +1,10 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, Button, Badge, Segmented, Select } from 'antd';
 import type { MenuProps } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../store';
-import { useWebSocket } from '../hooks/useWebSocket';
+import { isConsoleWebSocketConfigured, useWebSocket } from '../hooks/useWebSocket';
 import * as api from '../api/client';
 import {
   LayoutDashboard,
@@ -84,7 +84,55 @@ const navSections: NavSection[] = [
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
-  const { sidebarCollapsed, setSidebarCollapsed, theme, setTheme, wsConnected, currentBotId, setCurrentBotId } = useAppStore();
+  const {
+    sidebarCollapsed,
+    setSidebarCollapsed,
+    theme,
+    setTheme,
+    wsConnected,
+    wsConnecting,
+    agentWsLinked,
+    agentWsReady,
+    currentBotId,
+    setCurrentBotId,
+  } = useAppStore();
+  const consolePushConfigured = isConsoleWebSocketConfigured();
+
+  const wsStatusLabel = consolePushConfigured
+    ? wsConnected
+      ? 'Connected'
+      : wsConnecting
+        ? 'Connecting…'
+        : 'Disconnected'
+    : agentWsLinked
+      ? agentWsReady
+        ? 'Agent connected'
+        : 'Agent connecting…'
+      : 'Live push off';
+
+  const wsBadgeStatus = consolePushConfigured
+    ? wsConnected
+      ? 'success'
+      : wsConnecting
+        ? 'processing'
+        : 'error'
+    : agentWsLinked
+      ? agentWsReady
+        ? 'success'
+        : 'processing'
+      : 'default';
+
+  const wsStatusTitle = consolePushConfigured
+    ? wsConnected
+      ? 'WebSocket connected — status and sessions update in real time.'
+      : wsConnecting
+        ? 'Opening WebSocket connection…'
+        : 'WebSocket disconnected — retrying automatically; click to reload the page.'
+    : agentWsLinked
+      ? agentWsReady
+        ? 'Nanobot chat WebSocket is connected (streaming channel).'
+        : 'Connecting to nanobot chat WebSocket…'
+      : 'Console /ws push is off. Open Chat to link the agent WebSocket, or set VITE_CONSOLE_WS_URL for API push.';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useWebSocket();
@@ -95,9 +143,12 @@ export default function Layout({ children }: LayoutProps) {
   });
 
   const activeBotId = currentBotId || bots.find(b => b.is_default)?.id || bots[0]?.id || null;
-  if (bots.length > 0 && !currentBotId && activeBotId) {
-    setCurrentBotId(activeBotId);
-  }
+
+  useEffect(() => {
+    if (bots.length > 0 && !currentBotId && activeBotId) {
+      setCurrentBotId(activeBotId);
+    }
+  }, [bots, currentBotId, activeBotId, setCurrentBotId]);
 
   const selectedKey = '/' + (location.pathname.split('/')[1] || 'dashboard');
 
@@ -200,15 +251,25 @@ export default function Layout({ children }: LayoutProps) {
         <header className="shrink-0 sticky top-0 z-20 h-14 flex items-center justify-between px-4 lg:px-6 border-b border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
           <div className="flex items-center gap-3">
             <button
+              type="button"
+              title={wsStatusTitle}
               onClick={() => window.location.reload()}
               className="flex items-center gap-2 px-2 py-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
             >
               <Badge
-                status={wsConnected ? 'success' : 'error'}
-                className={wsConnected ? '' : 'opacity-50'}
+                status={wsBadgeStatus}
+                className={
+                  consolePushConfigured && !wsConnected && !wsConnecting
+                    ? 'opacity-90'
+                    : !consolePushConfigured &&
+                        agentWsLinked &&
+                        !agentWsReady
+                      ? 'opacity-90'
+                      : ''
+                }
               />
-              <span className="text-xs text-gray-400">
-                {wsConnected ? 'Syncing' : 'Click to reconnect'}
+              <span className="text-xs text-gray-600 dark:text-gray-400">
+                {wsStatusLabel}
               </span>
             </button>
             {bots.length > 0 && (
