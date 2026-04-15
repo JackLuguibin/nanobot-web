@@ -6,12 +6,15 @@ import {
   useMemo,
   type ReactNode,
 } from "react";
+import { flushSync } from "react-dom";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Markdown } from "../components/Markdown";
 import { useAppStore } from "../store";
 import {
+  disconnectNanobotChannelWebSocket,
   resolveNanobotWsBase,
+  tryParseNanobotResumeChatId,
   useNanobotChannelWebSocket,
 } from "../hooks/useNanobotChannelWebSocket";
 import { registerChatHandler, getWSRef } from "../hooks/useWebSocket";
@@ -73,6 +76,32 @@ function extractFirstJsonObject(text: string): string | null {
   return null;
 }
 
+function extractNanobotStatusContext(
+  root: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const direct = root.context;
+  if (direct !== undefined && typeof direct === "object" && direct !== null) {
+    return direct as Record<string, unknown>;
+  }
+  const wrapped = root.data;
+  if (
+    wrapped !== undefined &&
+    typeof wrapped === "object" &&
+    wrapped !== null &&
+    !Array.isArray(wrapped)
+  ) {
+    const nested = (wrapped as Record<string, unknown>).context;
+    if (
+      nested !== undefined &&
+      typeof nested === "object" &&
+      nested !== null
+    ) {
+      return nested as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
 function parseNanobotStatusJson(raw: string): NanobotContextUsage | null {
   const trimmed = raw.trim();
   if (!trimmed) {
@@ -88,11 +117,9 @@ function parseNanobotStatusJson(raw: string): NanobotContextUsage | null {
   );
   for (const candidate of candidates) {
     try {
-      const data = JSON.parse(candidate) as {
-        context?: Record<string, unknown>;
-      };
-      const ctx = data.context;
-      if (!ctx || typeof ctx !== "object") {
+      const data = JSON.parse(candidate) as Record<string, unknown>;
+      const ctx = extractNanobotStatusContext(data);
+      if (!ctx) {
         continue;
       }
       const te = ctx.tokens_estimate;
@@ -711,6 +738,34 @@ function sessionInfoSortKeyMs(info: SessionInfo): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+/** Prefer created_at for “newest created”; fallback updated_at. */
+function sessionInfoCreatedSortKeyMs(info: SessionInfo): number {
+  const raw = info.created_at ?? info.updated_at;
+  if (!raw) {
+    return 0;
+  }
+  const parsed = Date.parse(raw);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+/** Pick the session row with the largest created_at (newest created). */
+function pickNewestCreatedSessionKey(rows: SessionInfo[]): string | null {
+  if (rows.length === 0) {
+    return null;
+  }
+  let best = rows[0];
+  let bestMs = sessionInfoCreatedSortKeyMs(best);
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const ms = sessionInfoCreatedSortKeyMs(row);
+    if (ms >= bestMs) {
+      bestMs = ms;
+      best = row;
+    }
+  }
+  return best.key;
+}
+
 /** True when GET /sessions/:key failed because the session does not exist. */
 function isSessionMissingError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -720,8 +775,29 @@ function isSessionMissingError(error: unknown): boolean {
   return /\b404\b/.test(msg) || /not\s*found/i.test(msg);
 }
 
+/** Persist last open session so a bare `/chat` reload can return to it. */
+const LAST_NANOBOT_SESSION_STORAGE_KEY = "nanobot_console_last_session_key";
+
+/**
+ * Set from "New chat" so we do not auto-open an existing row while sessions
+ * still exist (see bare-route bootstrap).
+ */
+const NANOBOT_CHAT_NEW_INTENT_STORAGE_KEY = "nanobot_chat_new_intent";
+
+function readNanobotChatNewIntent(): boolean {
+  try {
+    return sessionStorage.getItem(NANOBOT_CHAT_NEW_INTENT_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export default function Chat() {
   const { sessionKey: paramSessionKey } = useParams();
+  const resumeNanobotChatUuid = useMemo(
+    () => tryParseNanobotResumeChatId(paramSessionKey),
+    [paramSessionKey],
+  );
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { currentSessionKey, setCurrentSessionKey, currentBotId, addToast } =
@@ -814,47 +890,151 @@ export default function Chat() {
   const nanobotWsBase = resolveNanobotWsBase();
   const useNanobotChannel = nanobotWsBase.length > 0;
 
-  /** 无 URL 会话时仍连 `/nanobot-ws/?client_id=...`，占位 id 与首条发送时一致 */
+  const {
+    data: sessions,
+    isPending: sessionsListPending,
+    isError: sessionsListError,
+  } = useQuery({
+    queryKey: ["sessions", currentBotId],
+    queryFn: () => api.listSessions(currentBotId),
+  });
+
+  const onBareNanobotChatRoute =
+    useNanobotChannel && paramSessionKey === undefined;
+  const nanobotChannelWsEnabled =
+    useNanobotChannel &&
+    (!onBareNanobotChatRoute ||
+      (!sessionsListPending &&
+        (sessionsListError ||
+          (sessions?.length ?? 0) === 0 ||
+          readNanobotChatNewIntent())));
+
+  useEffect(() => {
+    if (paramSessionKey === undefined) {
+      return;
+    }
+    try {
+      sessionStorage.removeItem(NANOBOT_CHAT_NEW_INTENT_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+  }, [paramSessionKey]);
+
+  useEffect(() => {
+    if (!useNanobotChannel) {
+      return;
+    }
+    const routeKey = paramSessionKey?.trim();
+    if (routeKey) {
+      useAppStore.getState().setNanobotClientId(routeKey);
+    }
+  }, [useNanobotChannel, paramSessionKey]);
+
+  /**
+   * After the session list loads, open the last-opened session if still present;
+   * otherwise the newest-created row in the list. Skip when starting a blank
+   * "New chat" (storage flag) or when there are no sessions (new WS chat).
+   */
+  useEffect(() => {
+    if (!useNanobotChannel) {
+      return;
+    }
+    if (paramSessionKey !== undefined) {
+      return;
+    }
+    if (sessionsListPending || sessionsListError) {
+      return;
+    }
+    const list = sessions ?? [];
+    if (list.length === 0) {
+      return;
+    }
+    if (readNanobotChatNewIntent()) {
+      return;
+    }
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(LAST_NANOBOT_SESSION_STORAGE_KEY);
+    } catch {
+      return;
+    }
+    const storedKey = stored?.trim() ?? "";
+    const keys = new Set(list.map((row) => row.key));
+    const fallback = pickNewestCreatedSessionKey(list);
+    if (!fallback) {
+      return;
+    }
+    const pick =
+      storedKey.length > 0 && keys.has(storedKey) ? storedKey : fallback;
+    navigate(`/chat/${encodeURIComponent(pick)}`, { replace: true });
+  }, [
+    useNanobotChannel,
+    paramSessionKey,
+    sessionsListPending,
+    sessionsListError,
+    sessions,
+    navigate,
+  ]);
+
+  useEffect(() => {
+    if (!useNanobotChannel || !activeSessionKey) {
+      return;
+    }
+    const key = activeSessionKey.trim();
+    if (!key) {
+      return;
+    }
+    try {
+      localStorage.setItem(LAST_NANOBOT_SESSION_STORAGE_KEY, key);
+    } catch {
+      // ignore quota / private mode
+    }
+  }, [useNanobotChannel, activeSessionKey]);
+
+  /** nanobot WS：`client_id=nanobot-web`，恢复会话时握手带 `chat_id=`（见 nanobot 文档） */
   const nanobotWsPlaceholderRef = useRef<string | null>(null);
-  /** 避免路由/store 短暂不同步时 sessionKey 变 null，误关仍等待回复的 WebSocket */
-  const nanobotWsSessionStableRef = useRef<string | null>(null);
 
-  const wsSessionKeyForNanobot =
-    useNanobotChannel && nanobotClientId
-      ? nanobotClientId
-      : activeSessionKey ??
-        (useNanobotChannel
-          ? (nanobotWsPlaceholderRef.current ??= crypto.randomUUID())
-          : null);
-
-  if (wsSessionKeyForNanobot) {
-    nanobotWsSessionStableRef.current = wsSessionKeyForNanobot;
-  }
-  const stableNanobotWsSessionKey =
-    wsSessionKeyForNanobot ?? nanobotWsSessionStableRef.current;
+  /**
+   * After deleting the current session, `navigate` is async while `useParams` still
+   * holds the old key briefly; `activeSessionKey` would still match the deleted id
+   * and trigger GET /sessions/:key → 404. Suppress JSONL fetch until the route
+   * param leaves that key.
+   */
+  const suppressSessionDetailForKeyRef = useRef<string | null>(null);
+  /** Dedupe `createSession` + list invalidation when route/store deps churn with the same logical session. */
+  const ensuredNanobotConsoleSessionRef = useRef<string | null>(null);
 
   const { sendMessage: sendNanobotMessage, ready: nanobotWsReady } =
     useNanobotChannelWebSocket({
-      enabled: useNanobotChannel,
-      sessionKey: stableNanobotWsSessionKey,
+      enabled: nanobotChannelWsEnabled,
+      canonicalSessionKeyFromRoute: paramSessionKey ?? null,
+      resumeChatId: resumeNanobotChatUuid,
     });
 
   /**
-   * nanobot `ready` 帧中的 `client_id` 为服务端确认的会话键（如 `websocket:…`）。
+   * nanobot `ready` 后由 `chat_id` 派生会话键 `websocket:<chat_id>`（见 `nanobotSessionKeyFromReadyChatId`）。
    * 在此建立控制台 `sessions/*.jsonl` 并在仍处 `/chat` 草稿态时把路由同步为该键。
    */
   useEffect(() => {
     if (!useNanobotChannel || !nanobotClientId) {
+      ensuredNanobotConsoleSessionRef.current = null;
       return;
     }
-    void api
-      .createSession(nanobotClientId, currentBotId)
-      .then(() => {
-        queryClient.invalidateQueries({ queryKey: ["sessions"] });
-      })
-      .catch((err) => {
-        console.error("[chat] createSession after nanobot ready", err);
-      });
+    const dedupeKey = `${String(currentBotId ?? "")}:${nanobotClientId}`;
+    if (ensuredNanobotConsoleSessionRef.current !== dedupeKey) {
+      ensuredNanobotConsoleSessionRef.current = dedupeKey;
+      void api
+        .createSession(nanobotClientId, currentBotId)
+        .then(() => {
+          queryClient.invalidateQueries({
+            queryKey: ["sessions", currentBotId],
+          });
+        })
+        .catch((err) => {
+          ensuredNanobotConsoleSessionRef.current = null;
+          console.error("[chat] createSession after nanobot ready", err);
+        });
+    }
 
     if (paramSessionKey !== undefined) {
       return;
@@ -863,7 +1043,19 @@ export default function Chat() {
     const usingPlaceholder =
       ph !== null &&
       (currentSessionKey === null || currentSessionKey === ph);
-    if (usingPlaceholder && nanobotClientId !== currentSessionKey) {
+    /**
+     * Adopt the server session from `ready` on bare `/chat`:
+     * - After first send we hold a draft UUID in `ph` (legacy path above).
+     * - After "New chat" with no message yet, `ph` is null but we still need to
+     *   navigate once `createSession` + `nanobotClientId` exist so the new row
+     *   is selected in the sidebar.
+     */
+    const shouldSyncBareRouteToReadySession =
+      nanobotClientId !== currentSessionKey &&
+      (usingPlaceholder ||
+        currentSessionKey === null ||
+        readNanobotChatNewIntent());
+    if (shouldSyncBareRouteToReadySession) {
       nanobotWsPlaceholderRef.current = null;
       setCurrentSessionKey(nanobotClientId);
       navigate(`/chat/${encodeURIComponent(nanobotClientId)}`, {
@@ -885,10 +1077,6 @@ export default function Chat() {
     if (!useNanobotChannel || !nanobotWsReady) {
       return;
     }
-    const sk = stableNanobotWsSessionKey;
-    if (!sk) {
-      return;
-    }
     if (statusJsonInFlightRef.current) {
       queuedStatusJsonRef.current = true;
       return;
@@ -902,7 +1090,6 @@ export default function Chat() {
       sendNanobotMessage({
         content: "/status_json",
         botId: currentBotId,
-        sessionKeyOverride: sk,
       });
     } catch {
       statusJsonInFlightRef.current = false;
@@ -913,13 +1100,7 @@ export default function Chat() {
         queueMicrotask(() => scheduleNanobotStatusJson());
       }
     }
-  }, [
-    useNanobotChannel,
-    nanobotWsReady,
-    stableNanobotWsSessionKey,
-    currentBotId,
-    sendNanobotMessage,
-  ]);
+  }, [useNanobotChannel, nanobotWsReady, currentBotId, sendNanobotMessage]);
 
   const completeSilentStatusJsonPoll = useCallback(
     (raw: string, options?: { fromEarlyParse?: boolean }) => {
@@ -945,11 +1126,6 @@ export default function Chat() {
     },
     [scheduleNanobotStatusJson],
   );
-
-  const { data: sessions, isPending: sessionsListPending } = useQuery({
-    queryKey: ["sessions", currentBotId],
-    queryFn: () => api.listSessions(currentBotId),
-  });
 
   /** Prefer `updated_at`, then `created_at`, for “latest” row in the sessions sidebar. */
   const latestSessionKeyForSidebar = useMemo(() => {
@@ -1021,19 +1197,76 @@ export default function Chat() {
   ]);
 
   const deleteSessionMutation = useMutation({
-    mutationFn: (key: string) => api.deleteSession(key, currentBotId),
+    mutationFn: async (key: string) => {
+      const isDeletingCurrent = activeSessionKey === key;
+
+      if (isDeletingCurrent) {
+        /**
+         * Required order for nanobot:
+         * 1) Hard-close WS so no `ready` is processed for the session being removed.
+         * 2) flushSync + navigate to the next session (or bare /chat).
+         * 3) DELETE the jsonl on the server.
+         */
+        if (useNanobotChannel) {
+          disconnectNanobotChannelWebSocket();
+        }
+        suppressSessionDetailForKeyRef.current = key;
+        void queryClient.cancelQueries({
+          queryKey: ["session", key, currentBotId],
+        });
+        queryClient.removeQueries({
+          queryKey: ["session", key, currentBotId],
+        });
+
+        const list =
+          queryClient.getQueryData<SessionInfo[]>([
+            "sessions",
+            currentBotId,
+          ]) ?? [];
+        const remaining = list.filter((row) => row.key !== key);
+        const nextKey = pickNewestCreatedSessionKey(remaining);
+
+        queryClient.setQueryData<SessionInfo[]>(
+          ["sessions", currentBotId],
+          remaining,
+        );
+
+        flushSync(() => {
+          nanobotWsPlaceholderRef.current = null;
+          setCurrentSessionKey(null);
+          setMessages([]);
+          setShowSuggestions(true);
+          setSubagentTasks([]);
+          if (nextKey) {
+            navigate(`/chat/${encodeURIComponent(nextKey)}`, { replace: true });
+          } else {
+            navigate("/chat", { replace: true });
+          }
+          setSessionsSidebarOpen(false);
+        });
+      } else {
+        queryClient.setQueryData<SessionInfo[]>(
+          ["sessions", currentBotId],
+          (old) => (old ? old.filter((row) => row.key !== key) : old),
+        );
+      }
+
+      return api.deleteSession(key, currentBotId);
+    },
     onSuccess: (_, key) => {
-      queryClient.invalidateQueries({ queryKey: ["sessions"] });
-      queryClient.invalidateQueries({ queryKey: ["session", key] });
-      if (activeSessionKey === key) {
-        nanobotWsPlaceholderRef.current = null;
-        nanobotWsSessionStableRef.current = null;
-        setCurrentSessionKey(null);
-        setMessages([]);
-        setShowSuggestions(true);
-        setSubagentTasks([]);
-        navigate("/chat");
-        setSessionsSidebarOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["sessions", currentBotId] });
+      queryClient.removeQueries({
+        queryKey: ["session", key, currentBotId],
+      });
+      try {
+        const stored = localStorage
+          .getItem(LAST_NANOBOT_SESSION_STORAGE_KEY)
+          ?.trim();
+        if (stored === key) {
+          localStorage.removeItem(LAST_NANOBOT_SESSION_STORAGE_KEY);
+        }
+      } catch {
+        // ignore
       }
       addToast({ type: "success", message: "会话已删除" });
     },
@@ -1050,16 +1283,30 @@ export default function Chat() {
     Boolean(activeSessionKey) &&
     (!useNanobotChannel || paramSessionKey !== undefined);
 
+  const sessionJsonlFetchSuppressedForDeletedRoute =
+    suppressSessionDetailForKeyRef.current !== null &&
+    suppressSessionDetailForKeyRef.current === activeSessionKey;
+
+  useEffect(() => {
+    const suppressed = suppressSessionDetailForKeyRef.current;
+    if (!suppressed) {
+      return;
+    }
+    if (paramSessionKey !== suppressed) {
+      suppressSessionDetailForKeyRef.current = null;
+    }
+  }, [paramSessionKey]);
+
   const { data: sessionData, isError: sessionQueryError, error: sessionQueryErrorObj } =
     useQuery({
       queryKey: ["session", activeSessionKey, currentBotId],
       queryFn: () => api.getSession(activeSessionKey!, currentBotId),
-      enabled: shouldFetchSessionJsonl,
+      enabled: shouldFetchSessionJsonl && !sessionJsonlFetchSuppressedForDeletedRoute,
       retry: false,
     });
 
   /**
-   * 路由里带了 :sessionKey 但磁盘上已无该会话（例如旧 bookmark）时，改为打开侧栏列表中的最后一个会话。
+   * 路由里带了 :sessionKey 但磁盘上已无该会话（例如旧 bookmark）时，改为打开列表中最新创建的会话。
    */
   useEffect(() => {
     if (!sessionQueryError || !paramSessionKey) {
@@ -1078,23 +1325,24 @@ export default function Chat() {
     const list = sessions ?? [];
     if (list.length === 0) {
       nanobotWsPlaceholderRef.current = null;
-      nanobotWsSessionStableRef.current = null;
       setCurrentSessionKey(null);
       navigate("/chat", { replace: true });
       return;
     }
 
-    const lastKey = list[list.length - 1].key;
-    if (lastKey === paramSessionKey) {
+    const newestKey = pickNewestCreatedSessionKey(list);
+    if (!newestKey) {
+      return;
+    }
+    if (newestKey === paramSessionKey) {
       nanobotWsPlaceholderRef.current = null;
-      nanobotWsSessionStableRef.current = null;
       setCurrentSessionKey(null);
       navigate("/chat", { replace: true });
       return;
     }
 
-    setCurrentSessionKey(lastKey);
-    navigate(`/chat/${encodeURIComponent(lastKey)}`, { replace: true });
+    setCurrentSessionKey(newestKey);
+    navigate(`/chat/${encodeURIComponent(newestKey)}`, { replace: true });
   }, [
     sessionQueryError,
     sessionQueryErrorObj,
@@ -1146,13 +1394,33 @@ export default function Chat() {
     }
   }, [sessionData, activeSessionKey, isStreaming]);
 
-  // Refresh session list when current session data loads/updates so sidebar message count stays in sync
+  // Keep sidebar message_count in sync with GET /sessions/:key without refetching the full list.
   const sessionMessageCount = sessionData?.message_count;
   useEffect(() => {
-    if (activeSessionKey && sessionMessageCount !== undefined) {
-      queryClient.invalidateQueries({ queryKey: ["sessions"] });
+    if (!activeSessionKey || sessionMessageCount === undefined) {
+      return;
     }
-  }, [activeSessionKey, sessionMessageCount, queryClient]);
+    queryClient.setQueryData<SessionInfo[]>(
+      ["sessions", currentBotId],
+      (old) => {
+        if (!old) {
+          return old;
+        }
+        let changed = false;
+        const next = old.map((row) => {
+          if (row.key !== activeSessionKey) {
+            return row;
+          }
+          if (row.message_count === sessionMessageCount) {
+            return row;
+          }
+          changed = true;
+          return { ...row, message_count: sessionMessageCount };
+        });
+        return changed ? next : old;
+      },
+    );
+  }, [activeSessionKey, sessionMessageCount, currentBotId, queryClient]);
 
   /**
    * 先把 `role: tool` 的 content 合并进对应 `tool_call_id` 的 assistant
@@ -1198,16 +1466,11 @@ export default function Chat() {
         if (chunk.type === "chat_start") {
           return;
         }
-        if (chunk.type === "chat_token") {
-          const t = typeof chunk.content === "string" ? chunk.content : "";
-          silentStatusJsonBufferRef.current += t;
-          const assembled = silentStatusJsonBufferRef.current;
-          if (parseNanobotStatusJson(assembled) !== null) {
-            completeSilentStatusJsonPoll(assembled, { fromEarlyParse: true });
-          }
-          return;
-        }
-        if (chunk.type === "channel_notice") {
+        if (
+          chunk.type === "chat_token" ||
+          chunk.type === "nanobot_status_json" ||
+          chunk.type === "channel_notice"
+        ) {
           const t = typeof chunk.content === "string" ? chunk.content : "";
           silentStatusJsonBufferRef.current += t;
           const assembled = silentStatusJsonBufferRef.current;
@@ -1229,6 +1492,14 @@ export default function Chat() {
         if (chunk.type === "error" && chunk.error) {
           completeSilentStatusJsonPoll("");
           return;
+        }
+        return;
+      }
+      if (chunk.type === "nanobot_status_json") {
+        const raw = typeof chunk.content === "string" ? chunk.content : "";
+        const parsed = parseNanobotStatusJson(raw);
+        if (parsed) {
+          setNanobotContextUsage(parsed);
         }
         return;
       }
@@ -1520,7 +1791,7 @@ export default function Chat() {
 
   // nanobot `ws` 频道：连接就绪后发送队列中的首条消息（新会话）
   useEffect(() => {
-    if (!useNanobotChannel || !nanobotWsReady || !stableNanobotWsSessionKey) {
+    if (!useNanobotChannel || !nanobotWsReady) {
       return;
     }
     const pending = pendingNanobotOutboundRef.current;
@@ -1531,7 +1802,6 @@ export default function Chat() {
       sendNanobotMessage({
         content: pending,
         botId: currentBotId,
-        sessionKeyOverride: stableNanobotWsSessionKey,
       });
       pendingNanobotOutboundRef.current = null;
     } catch {
@@ -1549,7 +1819,6 @@ export default function Chat() {
   }, [
     useNanobotChannel,
     nanobotWsReady,
-    stableNanobotWsSessionKey,
     currentBotId,
     sendNanobotMessage,
     addToast,
@@ -1602,7 +1871,6 @@ export default function Chat() {
             sendNanobotMessage({
               content: userMessage,
               botId: currentBotId,
-              sessionKeyOverride: stableNanobotWsSessionKey ?? sk,
             });
             pendingNanobotOutboundRef.current = null;
           } catch {
@@ -1628,7 +1896,6 @@ export default function Chat() {
         sendNanobotMessage({
           content: userMessage,
           botId: currentBotId,
-          sessionKeyOverride: stableNanobotWsSessionKey ?? sk,
         });
       } catch {
         cancelStreamTokenFlush();
@@ -1681,7 +1948,12 @@ export default function Chat() {
 
   const handleNewChat = () => {
     nanobotWsPlaceholderRef.current = null;
-    nanobotWsSessionStableRef.current = null;
+    try {
+      localStorage.removeItem(LAST_NANOBOT_SESSION_STORAGE_KEY);
+      sessionStorage.setItem(NANOBOT_CHAT_NEW_INTENT_STORAGE_KEY, "1");
+    } catch {
+      // ignore
+    }
     // Clear nanobot handshake state so the next WS uses a fresh placeholder and
     // `ready.client_id` drives the new session; otherwise stale ids keep the old
     // connection key and sidebar selection.

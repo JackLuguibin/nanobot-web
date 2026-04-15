@@ -78,9 +78,9 @@ interface AppState {
   /** Nanobot built-in channel WS (Chat `/nanobot-ws`); for header when console push is off. */
   agentWsLinked: boolean;
   agentWsReady: boolean;
-  /** Server-issued id from nanobot `ready` frame; tied to the active `/nanobot-ws` connection (per session `client_id`). */
+  /** Raw `chat_id` from nanobot `ready`; used as `chat_id` on outbound WS payloads. */
   nanobotChatId: string | null;
-  /** Canonical `client_id` from nanobot `ready` (e.g. `websocket:…`); use for console session JSONL key. */
+  /** `websocket:` + `ready.chat_id`; canonical session key for JSONL, routing, and outbound `session_key`. */
   nanobotClientId: string | null;
 
   // Actions

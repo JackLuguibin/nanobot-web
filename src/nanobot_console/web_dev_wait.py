@@ -54,7 +54,7 @@ async def _wait_until_nanobot_ws_handshake(uri: str, deadline: float) -> None:
 
 def wait_for_nanobot_websocket(host: str, port: int, timeout: float) -> None:
     """Block until a WebSocket handshake to the nanobot gateway succeeds."""
-    query = urlencode({"client_id": "nanobot_console_wait"})
+    query = urlencode({"client_id": "nanobot-web"})
     uri = f"ws://{host}:{port}/?{query}"
     label = f"{host}:{port}"
     deadline = time.monotonic() + timeout

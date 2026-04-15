@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { StreamChunk } from "../api/types";
 import { useAppStore } from "../store";
@@ -9,6 +9,23 @@ import {
 } from "../utils/toolCalls";
 
 import { dispatchChatChunk } from "./useWebSocket";
+
+/**
+ * Latest nanobot socket teardown from `useNanobotChannelWebSocket` (e.g. delete flow:
+ * disconnect → navigate → DELETE).
+ */
+const nanobotChannelHardDisconnectRef: { current: (() => void) | null } = {
+  current: null,
+};
+
+/**
+ * Synchronously close the nanobot channel WebSocket, cancel reconnect, and clear
+ * link state. Call **before** changing the chat route when the old session must
+ * not receive another `ready` (e.g. deleting the current session).
+ */
+export function disconnectNanobotChannelWebSocket(): void {
+  nanobotChannelHardDisconnectRef.current?.();
+}
 
 /** Frames from `nanobot.channels.websocket` (WebSocketChannel). */
 export interface NanobotNativeWsFrame {
@@ -25,11 +42,15 @@ export interface NanobotNativeWsFrame {
   text?: string;
   chat_id?: string;
   client_id?: string;
+  /** True when the client resumed via `?chat_id=` (see nanobot WS docs). */
+  resumed?: boolean;
   media?: string[];
   reply_to?: string;
   stream_id?: unknown;
   tool_calls?: unknown;
   reasoning_content?: string;
+  /** Payload for `/status_json` etc. when `text` is empty (see `mapNativeFrameToStreamChunk`). */
+  data?: unknown;
 }
 
 function optionalToolFrameFields(
@@ -84,10 +105,25 @@ function mapNativeFrameToStreamChunk(
   }
   if (ev === "message") {
     const text = typeof data.text === "string" ? data.text : "";
-    if (!text.trim()) {
-      return null;
+    if (text.trim()) {
+      return { type: "channel_notice", content: text };
     }
-    return { type: "channel_notice", content: text };
+    const inner = data.data;
+    if (
+      inner !== undefined &&
+      inner !== null &&
+      typeof inner === "object" &&
+      !Array.isArray(inner)
+    ) {
+      const ctx = (inner as Record<string, unknown>).context;
+      if (ctx !== undefined && typeof ctx === "object" && ctx !== null) {
+        return {
+          type: "nanobot_status_json",
+          content: JSON.stringify(inner),
+        };
+      }
+    }
+    return null;
   }
   if (ev === "stream_end") {
     const extra = optionalToolFrameFields(data);
@@ -136,13 +172,94 @@ export function resolveNanobotWsBase(): string {
   return String(raw).trim();
 }
 
-/** Build `ws:` / `wss:` URL with `client_id` query (nanobot native handshake). */
-export function buildNanobotChannelWsUrl(sessionKey: string): string {
+/** Fixed `client_id` for the console WebSocket URL (nanobot native handshake). */
+export const NANOBOT_WS_URL_CLIENT_ID = "nanobot-web";
+
+/**
+ * Canonical chat `session_key` from `ready.chat_id`: prefix `websocket:` for nanobot routing.
+ * Idempotent if `chat_id` already includes the prefix.
+ */
+export function nanobotSessionKeyFromReadyChatId(chatId: string): string {
+  const trimmed = chatId.trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed.startsWith("websocket:")) {
+    return trimmed;
+  }
+  return `websocket:${trimmed}`;
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isStandardUuidString(value: string): boolean {
+  return UUID_RE.test(value.trim());
+}
+
+/**
+ * Extract a standard UUID for `?chat_id=` resume from a console route key
+ * (`websocket:<uuid>` or raw UUID).
+ */
+export function tryParseNanobotResumeChatId(
+  sessionKeyOrRoute: string | null | undefined,
+): string | null {
+  if (sessionKeyOrRoute === undefined || sessionKeyOrRoute === null) {
+    return null;
+  }
+  const raw = String(sessionKeyOrRoute).trim();
+  if (!raw) {
+    return null;
+  }
+  if (isStandardUuidString(raw)) {
+    return raw.toLowerCase();
+  }
+  if (raw.startsWith("websocket:")) {
+    const inner = raw.slice("websocket:".length).trim();
+    return isStandardUuidString(inner) ? inner.toLowerCase() : null;
+  }
+  return null;
+}
+
+export interface NanobotWsUrlOptions {
+  /** Prior `ready.chat_id` (standard UUID); adds `?chat_id=` for session resume. */
+  resumeChatId?: string | null;
+  /** Optional; defaults to `import.meta.env.VITE_NANOBOT_WS_TOKEN`. */
+  token?: string | null;
+}
+
+/**
+ * Build `ws:` / `wss:` URL per nanobot docs:
+ * `?client_id=&token=&chat_id=`
+ */
+export function buildNanobotChannelWsUrl(
+  options?: NanobotWsUrlOptions,
+): string {
   const trimmed = resolveNanobotWsBase();
   if (!trimmed) {
     return "";
   }
-  const query = `client_id=${encodeURIComponent(sessionKey)}`;
+  const opts = options ?? {};
+  const envToken = (
+    import.meta.env.VITE_NANOBOT_WS_TOKEN as string | undefined
+  )?.trim();
+  const token =
+    opts.token !== undefined && opts.token !== null && String(opts.token).trim()
+      ? String(opts.token).trim()
+      : envToken || null;
+  const resumeRaw =
+    opts.resumeChatId !== undefined && opts.resumeChatId !== null
+      ? String(opts.resumeChatId).trim()
+      : "";
+  const params = new URLSearchParams();
+  params.set("client_id", NANOBOT_WS_URL_CLIENT_ID);
+  if (resumeRaw && isStandardUuidString(resumeRaw)) {
+    params.set("chat_id", resumeRaw.toLowerCase());
+  }
+  if (token) {
+    params.set("token", token);
+  }
+  const query = params.toString();
   if (trimmed.startsWith("ws://") || trimmed.startsWith("wss://")) {
     const base = trimmed.replace(/\/$/, "");
     const sep = base.includes("?") ? "&" : "?";
@@ -156,13 +273,37 @@ export function buildNanobotChannelWsUrl(sessionKey: string): string {
 
 export function useNanobotChannelWebSocket(options: {
   enabled: boolean;
-  sessionKey: string | null;
+  /**
+   * When the URL is `/chat/:sessionKey`, pass the decoded key so refresh/reconnect
+   * keeps the same logical session instead of adopting each `ready.chat_id` as new.
+   */
+  canonicalSessionKeyFromRoute?: string | null;
+  /**
+   * Standard UUID parsed from the route (`websocket:<uuid>` or raw UUID); sent as
+   * `?chat_id=` on the WebSocket URL so the server resumes the persisted chat.
+   */
+  resumeChatId?: string | null;
 }) {
-  const { enabled, sessionKey } = options;
+  const {
+    enabled,
+    canonicalSessionKeyFromRoute = null,
+    resumeChatId = null,
+  } = options;
   const [ready, setReady] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const isConnectingRef = useRef(false);
+  const canonicalFromRouteRef = useRef<string | null>(null);
+  canonicalFromRouteRef.current =
+    typeof canonicalSessionKeyFromRoute === "string" &&
+    canonicalSessionKeyFromRoute.trim().length > 0
+      ? canonicalSessionKeyFromRoute.trim()
+      : null;
+  const resumeChatIdRef = useRef<string | null>(null);
+  resumeChatIdRef.current =
+    typeof resumeChatId === "string" && resumeChatId.trim().length > 0
+      ? resumeChatId.trim().toLowerCase()
+      : null;
   const setAgentWsReady = useAppStore((s) => s.setAgentWsReady);
   const setNanobotChatId = useAppStore((s) => s.setNanobotChatId);
   const setNanobotClientId = useAppStore((s) => s.setNanobotClientId);
@@ -178,10 +319,17 @@ export function useNanobotChannelWebSocket(options: {
     }
   };
 
-  useEffect(() => {
+  /**
+   * useLayoutEffect so route-driven `resumeChatId` / `canonicalSessionKeyFromRoute`
+   * updates apply (close old socket, open new) before paint; pairs with
+   * `disconnectNanobotChannelWebSocket()` for explicit teardown before `flushSync` navigate.
+   */
+  useLayoutEffect(() => {
+    nanobotChannelHardDisconnectRef.current = null;
+
     const base = resolveNanobotWsBase();
     const setAgentWsLinked = useAppStore.getState().setAgentWsLinked;
-    if (!enabled || !sessionKey || !base) {
+    if (!enabled || !base) {
       setAgentWsLinked(false);
       setNanobotChatId(null);
       setNanobotClientId(null);
@@ -194,8 +342,10 @@ export function useNanobotChannelWebSocket(options: {
       return;
     }
 
-    const url = buildNanobotChannelWsUrl(sessionKey);
-    if (!url) {
+    const handshakeUrl = buildNanobotChannelWsUrl({
+      resumeChatId: resumeChatIdRef.current,
+    });
+    if (!handshakeUrl) {
       setAgentWsLinked(false);
       setNanobotChatId(null);
       setNanobotClientId(null);
@@ -204,11 +354,33 @@ export function useNanobotChannelWebSocket(options: {
 
     setAgentWsLinked(true);
     setNanobotChatId(null);
-    setNanobotClientId(null);
+    const routeKeyOnConnect = canonicalFromRouteRef.current;
+    if (routeKeyOnConnect) {
+      setNanobotClientId(routeKeyOnConnect);
+    } else {
+      setNanobotClientId(null);
+    }
 
     let cancelled = false;
     /** 每次 effect 清理或发起新连接时递增；旧 socket 的 onclose 若代数不一致则不重连 */
     let connectGeneration = 0;
+
+    const hardDisconnect = () => {
+      cancelled = true;
+      connectGeneration += 1;
+      clearReconnect();
+      isConnectingRef.current = false;
+      setReady(false);
+      useAppStore.getState().setAgentWsLinked(false);
+      useAppStore.getState().setNanobotChatId(null);
+      useAppStore.getState().setNanobotClientId(null);
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+
+    nanobotChannelHardDisconnectRef.current = hardDisconnect;
 
     const connect = () => {
       if (cancelled) {
@@ -223,6 +395,13 @@ export function useNanobotChannelWebSocket(options: {
       const myGen = ++connectGeneration;
 
       try {
+        const url = buildNanobotChannelWsUrl({
+          resumeChatId: resumeChatIdRef.current,
+        });
+        if (!url) {
+          isConnectingRef.current = false;
+          return;
+        }
         const ws = new WebSocket(url);
         wsRef.current = ws;
 
@@ -251,22 +430,37 @@ export function useNanobotChannelWebSocket(options: {
                 typeof rawId === "string" && rawId.trim().length > 0
                   ? rawId.trim()
                   : null;
-              const rawClientId = data.client_id;
-              const clientId =
-                typeof rawClientId === "string" && rawClientId.trim().length > 0
-                  ? rawClientId.trim()
-                  : null;
+              const derivedSessionKey =
+                cid !== null ? nanobotSessionKeyFromReadyChatId(cid) : null;
+              const routeKey = canonicalFromRouteRef.current;
+              const canonicalSessionKey =
+                routeKey !== null && routeKey.length > 0
+                  ? routeKey
+                  : derivedSessionKey;
+              const wireClientId = data.client_id;
+              const wireClientIdStr =
+                typeof wireClientId === "string" && wireClientId.trim().length > 0
+                  ? wireClientId.trim()
+                  : "";
+              const resumedWire = data.resumed === true;
               if (cancelled || myGen !== connectGeneration) {
                 return;
               }
               setNanobotChatId(cid);
-              setNanobotClientId(clientId);
+              setNanobotClientId(
+                canonicalSessionKey !== null && canonicalSessionKey.length > 0
+                  ? canonicalSessionKey
+                  : null,
+              );
               setReady(true);
               console.log(
                 "[nanobot-ws] ready",
                 url,
                 cid ?? "",
-                clientId ?? "",
+                canonicalSessionKey ?? "",
+                wireClientIdStr,
+                "resumed=",
+                resumedWire,
               );
               return;
             }
@@ -285,7 +479,10 @@ export function useNanobotChannelWebSocket(options: {
             return;
           }
           setNanobotChatId(null);
-          setNanobotClientId(null);
+          const rk = canonicalFromRouteRef.current;
+          if (!rk) {
+            setNanobotClientId(null);
+          }
           setReady(false);
           wsRef.current = null;
           if (cancelled) {
@@ -308,38 +505,31 @@ export function useNanobotChannelWebSocket(options: {
     connect();
 
     return () => {
-      cancelled = true;
-      connectGeneration += 1;
-      clearReconnect();
-      isConnectingRef.current = false;
-      useAppStore.getState().setAgentWsLinked(false);
-      useAppStore.getState().setNanobotChatId(null);
-      useAppStore.getState().setNanobotClientId(null);
-      setReady(false);
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
+      nanobotChannelHardDisconnectRef.current = null;
+      hardDisconnect();
     };
-  }, [enabled, sessionKey, setNanobotChatId, setNanobotClientId]);
+  }, [
+    enabled,
+    canonicalSessionKeyFromRoute,
+    resumeChatId,
+    setNanobotChatId,
+    setNanobotClientId,
+  ]);
 
   const sendMessage = useCallback(
-    (payload: { content: string; botId: string | null; sessionKeyOverride: string }) => {
+    (payload: { content: string; botId: string | null }) => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         throw new Error("nanobot WebSocket not connected");
       }
-      const chatId = useAppStore.getState().nanobotChatId;
       const body: Record<string, unknown> = {
         content: payload.content,
-        session_key: payload.sessionKeyOverride,
-        metadata: {
+      };
+      if (payload.botId) {
+        body.metadata = {
           bot_id: payload.botId,
           source: "nanobot_console",
-        },
-      };
-      if (chatId) {
-        body.chat_id = chatId;
+        };
       }
       const outbound = JSON.stringify(body);
       useAppStore.getState().addNanobotWsDebugLine(`[out] ${outbound}`);
