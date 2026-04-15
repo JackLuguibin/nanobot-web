@@ -80,6 +80,8 @@ interface AppState {
   agentWsReady: boolean;
   /** Server-issued id from nanobot `ready` frame; tied to the active `/nanobot-ws` connection (per session `client_id`). */
   nanobotChatId: string | null;
+  /** Canonical `client_id` from nanobot `ready` (e.g. `websocket:…`); use for console session JSONL key. */
+  nanobotClientId: string | null;
 
   // Actions
   setSidebarCollapsed: (collapsed: boolean) => void;
@@ -108,6 +110,7 @@ interface AppState {
   setAgentWsLinked: (linked: boolean) => void;
   setAgentWsReady: (ready: boolean) => void;
   setNanobotChatId: (chatId: string | null) => void;
+  setNanobotClientId: (clientId: string | null) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -137,6 +140,7 @@ export const useAppStore = create<AppState>((set) => ({
   agentWsLinked: false,
   agentWsReady: false,
   nanobotChatId: null,
+  nanobotClientId: null,
 
   // Actions
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
@@ -148,7 +152,12 @@ export const useAppStore = create<AppState>((set) => ({
   setCurrentSessionKey: (key) => set({ currentSessionKey: key }),
   setCurrentBotId: (botId) => {
     localStorage.setItem('nanobot-current-bot-id', botId || '');
-    set({ currentBotId: botId, currentSessionKey: null, nanobotChatId: null });
+    set({
+      currentBotId: botId,
+      currentSessionKey: null,
+      nanobotChatId: null,
+      nanobotClientId: null,
+    });
   },
 
   setStatus: (status) => set({ status }),
@@ -208,4 +217,5 @@ export const useAppStore = create<AppState>((set) => ({
   setAgentWsLinked: (linked) => set({ agentWsLinked: linked }),
   setAgentWsReady: (ready) => set({ agentWsReady: ready }),
   setNanobotChatId: (chatId) => set({ nanobotChatId: chatId }),
+  setNanobotClientId: (clientId) => set({ nanobotClientId: clientId }),
 }));

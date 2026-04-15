@@ -40,7 +40,7 @@ import {
   Info,
   X,
 } from "lucide-react";
-import type { StreamChunk, ToolCall } from "../api/types";
+import type { SessionInfo, StreamChunk, ToolCall } from "../api/types";
 import { normalizeToolCallsArray } from "../utils/toolCalls";
 import type { TextAreaRef } from "antd/es/input/TextArea";
 import Input from "antd/es/input";
@@ -701,6 +701,16 @@ function MessageToolCallsBlock({
   );
 }
 
+/** Timestamp for ordering session rows (newer = larger). */
+function sessionInfoSortKeyMs(info: SessionInfo): number {
+  const raw = info.updated_at ?? info.created_at;
+  if (!raw) {
+    return 0;
+  }
+  const parsed = Date.parse(raw);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 /** True when GET /sessions/:key failed because the session does not exist. */
 function isSessionMissingError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -716,6 +726,7 @@ export default function Chat() {
   const queryClient = useQueryClient();
   const { currentSessionKey, setCurrentSessionKey, currentBotId, addToast } =
     useAppStore();
+  const nanobotClientId = useAppStore((s) => s.nanobotClientId);
 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -809,10 +820,12 @@ export default function Chat() {
   const nanobotWsSessionStableRef = useRef<string | null>(null);
 
   const wsSessionKeyForNanobot =
-    activeSessionKey ??
-    (useNanobotChannel
-      ? (nanobotWsPlaceholderRef.current ??= crypto.randomUUID())
-      : null);
+    useNanobotChannel && nanobotClientId
+      ? nanobotClientId
+      : activeSessionKey ??
+        (useNanobotChannel
+          ? (nanobotWsPlaceholderRef.current ??= crypto.randomUUID())
+          : null);
 
   if (wsSessionKeyForNanobot) {
     nanobotWsSessionStableRef.current = wsSessionKeyForNanobot;
@@ -825,6 +838,48 @@ export default function Chat() {
       enabled: useNanobotChannel,
       sessionKey: stableNanobotWsSessionKey,
     });
+
+  /**
+   * nanobot `ready` 帧中的 `client_id` 为服务端确认的会话键（如 `websocket:…`）。
+   * 在此建立控制台 `sessions/*.jsonl` 并在仍处 `/chat` 草稿态时把路由同步为该键。
+   */
+  useEffect(() => {
+    if (!useNanobotChannel || !nanobotClientId) {
+      return;
+    }
+    void api
+      .createSession(nanobotClientId, currentBotId)
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      })
+      .catch((err) => {
+        console.error("[chat] createSession after nanobot ready", err);
+      });
+
+    if (paramSessionKey !== undefined) {
+      return;
+    }
+    const ph = nanobotWsPlaceholderRef.current;
+    const usingPlaceholder =
+      ph !== null &&
+      (currentSessionKey === null || currentSessionKey === ph);
+    if (usingPlaceholder && nanobotClientId !== currentSessionKey) {
+      nanobotWsPlaceholderRef.current = null;
+      setCurrentSessionKey(nanobotClientId);
+      navigate(`/chat/${encodeURIComponent(nanobotClientId)}`, {
+        replace: true,
+      });
+    }
+  }, [
+    useNanobotChannel,
+    nanobotClientId,
+    currentBotId,
+    currentSessionKey,
+    paramSessionKey,
+    navigate,
+    setCurrentSessionKey,
+    queryClient,
+  ]);
 
   const scheduleNanobotStatusJson = useCallback(() => {
     if (!useNanobotChannel || !nanobotWsReady) {
@@ -895,6 +950,75 @@ export default function Chat() {
     queryKey: ["sessions", currentBotId],
     queryFn: () => api.listSessions(currentBotId),
   });
+
+  /** Prefer `updated_at`, then `created_at`, for “latest” row in the sessions sidebar. */
+  const latestSessionKeyForSidebar = useMemo(() => {
+    const rows = sessions ?? [];
+    if (rows.length === 0) {
+      return null;
+    }
+    let best = rows[0];
+    let bestMs = sessionInfoSortKeyMs(best);
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const ms = sessionInfoSortKeyMs(row);
+      if (ms >= bestMs) {
+        bestMs = ms;
+        best = row;
+      }
+    }
+    return best.key;
+  }, [sessions]);
+
+  const sessionSidebarRowRefs = useRef<Map<string, HTMLDivElement | null>>(
+    new Map(),
+  );
+  const newChatSidebarScrollUntilRef = useRef(0);
+  const [newChatSidebarScrollToken, setNewChatSidebarScrollToken] =
+    useState(0);
+
+  useEffect(() => {
+    const until = newChatSidebarScrollUntilRef.current;
+    if (!until || Date.now() > until) {
+      return;
+    }
+    if (!sessions?.length) {
+      return;
+    }
+    if (!sessionsSidebarOpen) {
+      return;
+    }
+    if (sessionsSidebarCollapsed) {
+      return;
+    }
+
+    const targetKey =
+      nanobotClientId &&
+      sessions.some((sessionRow) => sessionRow.key === nanobotClientId)
+        ? nanobotClientId
+        : latestSessionKeyForSidebar;
+    if (!targetKey) {
+      return;
+    }
+
+    const rowEl = sessionSidebarRowRefs.current.get(targetKey);
+    if (!rowEl) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      rowEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }, 320);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    sessions,
+    nanobotClientId,
+    latestSessionKeyForSidebar,
+    sessionsSidebarOpen,
+    sessionsSidebarCollapsed,
+    newChatSidebarScrollToken,
+  ]);
 
   const deleteSessionMutation = useMutation({
     mutationFn: (key: string) => api.deleteSession(key, currentBotId),
@@ -1396,7 +1520,7 @@ export default function Chat() {
 
   // nanobot `ws` 频道：连接就绪后发送队列中的首条消息（新会话）
   useEffect(() => {
-    if (!useNanobotChannel || !nanobotWsReady || !activeSessionKey) {
+    if (!useNanobotChannel || !nanobotWsReady || !stableNanobotWsSessionKey) {
       return;
     }
     const pending = pendingNanobotOutboundRef.current;
@@ -1407,7 +1531,7 @@ export default function Chat() {
       sendNanobotMessage({
         content: pending,
         botId: currentBotId,
-        sessionKeyOverride: activeSessionKey,
+        sessionKeyOverride: stableNanobotWsSessionKey,
       });
       pendingNanobotOutboundRef.current = null;
     } catch {
@@ -1425,7 +1549,7 @@ export default function Chat() {
   }, [
     useNanobotChannel,
     nanobotWsReady,
-    activeSessionKey,
+    stableNanobotWsSessionKey,
     currentBotId,
     sendNanobotMessage,
     addToast,
@@ -1470,7 +1594,7 @@ export default function Chat() {
           nanobotWsPlaceholderRef.current ?? crypto.randomUUID();
         nanobotWsPlaceholderRef.current = sk;
         setCurrentSessionKey(sk);
-        // 勿在此 POST /sessions(sk)：会与 nanobot 落盘键不一致并产生空 UUID 侧栏项。
+        // 勿在此 POST /sessions(占位 UUID)：与 nanobot `ready.client_id` 不一致；会话在 ready 时已按 client_id 建立。
         // URL 等 handleStreamChunk 的 session_key。pending 仅 ref，不会触发重渲染，就绪则立刻发。
         pendingNanobotOutboundRef.current = userMessage;
         if (nanobotWsReady) {
@@ -1478,7 +1602,7 @@ export default function Chat() {
             sendNanobotMessage({
               content: userMessage,
               botId: currentBotId,
-              sessionKeyOverride: sk,
+              sessionKeyOverride: stableNanobotWsSessionKey ?? sk,
             });
             pendingNanobotOutboundRef.current = null;
           } catch {
@@ -1504,7 +1628,7 @@ export default function Chat() {
         sendNanobotMessage({
           content: userMessage,
           botId: currentBotId,
-          sessionKeyOverride: sk,
+          sessionKeyOverride: stableNanobotWsSessionKey ?? sk,
         });
       } catch {
         cancelStreamTokenFlush();
@@ -1558,13 +1682,21 @@ export default function Chat() {
   const handleNewChat = () => {
     nanobotWsPlaceholderRef.current = null;
     nanobotWsSessionStableRef.current = null;
+    // Clear nanobot handshake state so the next WS uses a fresh placeholder and
+    // `ready.client_id` drives the new session; otherwise stale ids keep the old
+    // connection key and sidebar selection.
+    useAppStore.getState().setNanobotChatId(null);
+    useAppStore.getState().setNanobotClientId(null);
     setCurrentSessionKey(null);
     setMessages([]);
     setShowSuggestions(true);
     setSubagentTasks([]);
     navigate("/chat");
     inputRef.current?.focus();
-    setSessionsSidebarOpen(false);
+    newChatSidebarScrollUntilRef.current = Date.now() + 12000;
+    setNewChatSidebarScrollToken((n) => n + 1);
+    setSessionsSidebarOpen(true);
+    setSessionsSidebarCollapsed(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -1658,6 +1790,13 @@ export default function Chat() {
           {sessions?.map((session) => (
             <div
               key={session.key}
+              ref={(el) => {
+                if (el) {
+                  sessionSidebarRowRefs.current.set(session.key, el);
+                } else {
+                  sessionSidebarRowRefs.current.delete(session.key);
+                }
+              }}
               className={`flex items-stretch rounded-xl transition-all ${
                 activeSessionKey === session.key
                   ? "bg-gradient-to-r from-primary-50 to-blue-50 dark:from-primary-900/30 dark:to-blue-900/20 text-primary-700 dark:text-primary-300"

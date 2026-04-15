@@ -165,6 +165,7 @@ export function useNanobotChannelWebSocket(options: {
   const isConnectingRef = useRef(false);
   const setAgentWsReady = useAppStore((s) => s.setAgentWsReady);
   const setNanobotChatId = useAppStore((s) => s.setNanobotChatId);
+  const setNanobotClientId = useAppStore((s) => s.setNanobotClientId);
 
   useEffect(() => {
     setAgentWsReady(ready);
@@ -183,6 +184,7 @@ export function useNanobotChannelWebSocket(options: {
     if (!enabled || !sessionKey || !base) {
       setAgentWsLinked(false);
       setNanobotChatId(null);
+      setNanobotClientId(null);
       clearReconnect();
       setReady(false);
       if (wsRef.current) {
@@ -196,11 +198,13 @@ export function useNanobotChannelWebSocket(options: {
     if (!url) {
       setAgentWsLinked(false);
       setNanobotChatId(null);
+      setNanobotClientId(null);
       return;
     }
 
     setAgentWsLinked(true);
     setNanobotChatId(null);
+    setNanobotClientId(null);
 
     let cancelled = false;
     /** 每次 effect 清理或发起新连接时递增；旧 socket 的 onclose 若代数不一致则不重连 */
@@ -247,12 +251,23 @@ export function useNanobotChannelWebSocket(options: {
                 typeof rawId === "string" && rawId.trim().length > 0
                   ? rawId.trim()
                   : null;
+              const rawClientId = data.client_id;
+              const clientId =
+                typeof rawClientId === "string" && rawClientId.trim().length > 0
+                  ? rawClientId.trim()
+                  : null;
               if (cancelled || myGen !== connectGeneration) {
                 return;
               }
               setNanobotChatId(cid);
+              setNanobotClientId(clientId);
               setReady(true);
-              console.log("[nanobot-ws] ready", url, cid ?? "");
+              console.log(
+                "[nanobot-ws] ready",
+                url,
+                cid ?? "",
+                clientId ?? "",
+              );
               return;
             }
             const chunk = mapNativeFrameToStreamChunk(data);
@@ -270,6 +285,7 @@ export function useNanobotChannelWebSocket(options: {
             return;
           }
           setNanobotChatId(null);
+          setNanobotClientId(null);
           setReady(false);
           wsRef.current = null;
           if (cancelled) {
@@ -298,13 +314,14 @@ export function useNanobotChannelWebSocket(options: {
       isConnectingRef.current = false;
       useAppStore.getState().setAgentWsLinked(false);
       useAppStore.getState().setNanobotChatId(null);
+      useAppStore.getState().setNanobotClientId(null);
       setReady(false);
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
       }
     };
-  }, [enabled, sessionKey, setNanobotChatId]);
+  }, [enabled, sessionKey, setNanobotChatId, setNanobotClientId]);
 
   const sendMessage = useCallback(
     (payload: { content: string; botId: string | null; sessionKeyOverride: string }) => {
