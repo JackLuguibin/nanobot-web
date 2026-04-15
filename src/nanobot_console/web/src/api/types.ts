@@ -208,7 +208,9 @@ export type WSMessageType =
   | 'activity_update'
   | 'subagent_start'
   | 'subagent_done'
-  | 'assistant_message';
+  | 'assistant_message'
+  /** nanobot `event: message` — status / retry lines until `chat_end` */
+  | 'channel_notice';
 
 export interface WSMessage {
   type: WSMessageType;

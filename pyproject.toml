@@ -26,6 +26,22 @@ dependencies = [
     "pydantic-settings>=2.0",
 ]
 
+# Dev install: use scripts/install-dev.sh (or `pip install --upgrade -e ".[dev]"`) so
+# nanobot-ai is re-fetched from Git. Plain `pip install -e ".[dev]"` may keep a
+# cached revision.
+#
+# Editable install only links nanobot-web sources. To hack nanobot in a separate
+# clone instead of Git, override the dependency, e.g.:
+#   .venv/bin/pip uninstall -y nanobot-ai
+#   .venv/bin/pip install -e ../nanobot
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.0.0",
+    "pytest>=8.0.0",
+    "ruff>=0.4.0",
+]
+
 [project.urls]
 Homepage = ""
 Documentation = ""

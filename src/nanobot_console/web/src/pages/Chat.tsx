@@ -37,6 +37,7 @@ import {
   User,
   Wand2,
   Wrench,
+  Info,
   X,
 } from "lucide-react";
 import type { StreamChunk, ToolCall } from "../api/types";
@@ -44,6 +45,126 @@ import { normalizeToolCallsArray } from "../utils/toolCalls";
 import type { TextAreaRef } from "antd/es/input/TextArea";
 import Input from "antd/es/input";
 import { SubagentPanel, type SubagentTask } from "../components/SubagentPanel";
+
+/** nanobot `/status_json` → `context` slice (silent poll after each turn). */
+interface NanobotContextUsage {
+  tokens_estimate: number;
+  window_total: number;
+  percent_used: number;
+}
+
+function extractFirstJsonObject(text: string): string | null {
+  const start = text.indexOf("{");
+  if (start < 0) {
+    return null;
+  }
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (c === "{") {
+      depth += 1;
+    } else if (c === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(start, i + 1);
+      }
+    }
+  }
+  return null;
+}
+
+function parseNanobotStatusJson(raw: string): NanobotContextUsage | null {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+  let text = trimmed;
+  const fence = /^```(?:json)?\s*([\s\S]*?)```$/m.exec(trimmed);
+  if (fence) {
+    text = fence[1].trim();
+  }
+  const candidates = [text, extractFirstJsonObject(trimmed) ?? ""].filter(
+    (s) => s.length > 0,
+  );
+  for (const candidate of candidates) {
+    try {
+      const data = JSON.parse(candidate) as {
+        context?: Record<string, unknown>;
+      };
+      const ctx = data.context;
+      if (!ctx || typeof ctx !== "object") {
+        continue;
+      }
+      const te = ctx.tokens_estimate;
+      const wt = ctx.window_total;
+      const pu = ctx.percent_used;
+      if (
+        typeof te === "number" &&
+        typeof wt === "number" &&
+        typeof pu === "number"
+      ) {
+        return {
+          tokens_estimate: te,
+          window_total: wt,
+          percent_used: pu,
+        };
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/**
+ * Prefer explicit `content`, then console-WS `data` (string or { text | content | message | body }),
+ * so `chat_done` shows what the server sent instead of falling back to a synthetic placeholder.
+ */
+function resolveChatDonePrimaryText(chunk: StreamChunk): string {
+  if (typeof chunk.content === "string" && chunk.content !== "") {
+    return chunk.content;
+  }
+  const raw = (chunk as StreamChunk & { data?: unknown }).data;
+  if (raw === undefined || raw === null) {
+    return "";
+  }
+  if (typeof raw === "string") {
+    return raw;
+  }
+  if (typeof raw === "object" && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>;
+    for (const key of ["text", "content", "message", "body"] as const) {
+      const v = o[key];
+      if (typeof v === "string" && v !== "") {
+        return v;
+      }
+    }
+  }
+  return "";
+}
+
+/** Abbreviate token counts with K / M (e.g. 6744 → 6.7K, 1_200_000 → 1.2M). */
+function formatCompactTokenCount(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "—";
+  }
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) {
+    return `${_formatKmScaled(value / 1_000_000)}M`;
+  }
+  if (abs >= 1000) {
+    return `${_formatKmScaled(value / 1000)}K`;
+  }
+  return String(Math.round(value));
+}
+
+function _formatKmScaled(scaled: number): string {
+  if (scaled >= 100) {
+    return String(Math.round(scaled));
+  }
+  const rounded = Math.round(scaled * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
 
 interface ChatInputProps {
   inputRef: React.RefObject<TextAreaRef | null>;
@@ -53,6 +174,9 @@ interface ChatInputProps {
   onSend: () => void;
   onStop: () => void;
   isStreaming: boolean;
+  showContextMeter: boolean;
+  contextUsage: NanobotContextUsage | null;
+  contextLoading: boolean;
 }
 
 function ChatInput({
@@ -63,6 +187,9 @@ function ChatInput({
   onSend,
   onStop,
   isStreaming,
+  showContextMeter,
+  contextUsage,
+  contextLoading,
 }: ChatInputProps) {
   const [focused, setFocused] = useState(false);
   const canSend = value.trim().length > 0;
@@ -91,8 +218,8 @@ function ChatInput({
         />
 
         {/* Action bar */}
-        <div className="flex items-center justify-between px-3 pb-2.5 pt-0">
-          <span className="text-xs text-gray-400 dark:text-gray-500 select-none">
+        <div className="flex items-center justify-between gap-2 px-3 pb-2.5 pt-0">
+          <span className="text-xs text-gray-400 dark:text-gray-500 select-none min-w-0 flex-1">
             {isStreaming ? (
               <span className="flex items-center gap-1.5 text-blue-500">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
@@ -102,6 +229,32 @@ function ChatInput({
               <span>Enter to send · Shift+Enter for new line</span>
             )}
           </span>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {showContextMeter && (
+              <div
+                className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-gray-100/90 dark:bg-gray-800/90 border border-gray-200/80 dark:border-gray-600/80 text-[11px] tabular-nums text-gray-600 dark:text-gray-300 max-w-[min(100vw-8rem,14rem)]"
+                title="Context: estimated / window · % used (refreshed via /status_json after each reply)"
+              >
+                {contextLoading ? (
+                  <span className="flex items-center gap-1 text-gray-400">
+                    <LoadingOutlined className="text-[10px]" />
+                    Loading…
+                  </span>
+                ) : contextUsage ? (
+                  <span className="truncate">
+                    {formatCompactTokenCount(contextUsage.tokens_estimate)} /{" "}
+                    {formatCompactTokenCount(contextUsage.window_total)} ·{" "}
+                    {Number.isInteger(contextUsage.percent_used)
+                      ? contextUsage.percent_used
+                      : contextUsage.percent_used.toFixed(1)}
+                    %
+                  </span>
+                ) : (
+                  <span className="text-gray-400">—</span>
+                )}
+              </div>
+            )}
 
           <button
             onClick={isStreaming ? onStop : onSend}
@@ -127,6 +280,7 @@ function ChatInput({
               </svg>
             )}
           </button>
+          </div>
         </div>
       </div>
     </div>
@@ -589,9 +743,16 @@ export default function Chat() {
   const [streamingToolProgress, setStreamingToolProgress] = useState<string[]>(
     [],
   );
+  /** nanobot `event: message` (retries, status) until `chat_end` */
+  const [streamingChannelNotices, setStreamingChannelNotices] = useState<
+    string[]
+  >([]);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [subagentTasks, setSubagentTasks] = useState<SubagentTask[]>([]);
   const [subagentPanelOpen, setSubagentPanelOpen] = useState(true);
+  const [nanobotContextUsage, setNanobotContextUsage] =
+    useState<NanobotContextUsage | null>(null);
+  const [statusJsonLoading, setStatusJsonLoading] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -602,6 +763,16 @@ export default function Chat() {
   const pendingStreamTokenDeltaRef = useRef("");
   /** 新会话首条消息：等待 nanobot 内置 websocket 通道连接后再发送 */
   const pendingNanobotOutboundRef = useRef<string | null>(null);
+  /** Silent `/status_json` poll: ignore streamed UI, parse JSON only */
+  const silentStatusJsonRef = useRef(false);
+  const silentStatusJsonBufferRef = useRef("");
+  const statusJsonInFlightRef = useRef(false);
+  const queuedStatusJsonRef = useRef(false);
+  /** Incremented when `activeSessionKey` changes so stale `/status_json` replies are ignored */
+  const contextSessionEpochRef = useRef(0);
+  const statusJsonPollEpochRef = useRef(0);
+  /** After early JSON parse from `/status_json`, ignore a following empty `chat_end` frame */
+  const expectStatusJsonTrailingChatDoneRef = useRef(false);
 
   /** Cancel scheduled rAF and apply any buffered tokens so state matches streamingContentRef */
   const cancelStreamTokenFlush = useCallback(() => {
@@ -617,6 +788,17 @@ export default function Chat() {
   }, []);
 
   const activeSessionKey = paramSessionKey || currentSessionKey;
+
+  useEffect(() => {
+    contextSessionEpochRef.current += 1;
+    setNanobotContextUsage(null);
+    silentStatusJsonRef.current = false;
+    silentStatusJsonBufferRef.current = "";
+    statusJsonInFlightRef.current = false;
+    queuedStatusJsonRef.current = false;
+    setStatusJsonLoading(false);
+    expectStatusJsonTrailingChatDoneRef.current = false;
+  }, [activeSessionKey]);
 
   const nanobotWsBase = resolveNanobotWsBase();
   const useNanobotChannel = nanobotWsBase.length > 0;
@@ -643,6 +825,71 @@ export default function Chat() {
       enabled: useNanobotChannel,
       sessionKey: stableNanobotWsSessionKey,
     });
+
+  const scheduleNanobotStatusJson = useCallback(() => {
+    if (!useNanobotChannel || !nanobotWsReady) {
+      return;
+    }
+    const sk = stableNanobotWsSessionKey;
+    if (!sk) {
+      return;
+    }
+    if (statusJsonInFlightRef.current) {
+      queuedStatusJsonRef.current = true;
+      return;
+    }
+    statusJsonInFlightRef.current = true;
+    silentStatusJsonRef.current = true;
+    silentStatusJsonBufferRef.current = "";
+    statusJsonPollEpochRef.current = contextSessionEpochRef.current;
+    setStatusJsonLoading(true);
+    try {
+      sendNanobotMessage({
+        content: "/status_json",
+        botId: currentBotId,
+        sessionKeyOverride: sk,
+      });
+    } catch {
+      statusJsonInFlightRef.current = false;
+      silentStatusJsonRef.current = false;
+      setStatusJsonLoading(false);
+      if (queuedStatusJsonRef.current) {
+        queuedStatusJsonRef.current = false;
+        queueMicrotask(() => scheduleNanobotStatusJson());
+      }
+    }
+  }, [
+    useNanobotChannel,
+    nanobotWsReady,
+    stableNanobotWsSessionKey,
+    currentBotId,
+    sendNanobotMessage,
+  ]);
+
+  const completeSilentStatusJsonPoll = useCallback(
+    (raw: string, options?: { fromEarlyParse?: boolean }) => {
+      const epochOk =
+        statusJsonPollEpochRef.current === contextSessionEpochRef.current;
+      silentStatusJsonBufferRef.current = "";
+      silentStatusJsonRef.current = false;
+      statusJsonInFlightRef.current = false;
+      setStatusJsonLoading(false);
+      if (options?.fromEarlyParse) {
+        expectStatusJsonTrailingChatDoneRef.current = true;
+      }
+      if (epochOk) {
+        const parsed = parseNanobotStatusJson(raw);
+        if (parsed) {
+          setNanobotContextUsage(parsed);
+        }
+      }
+      if (queuedStatusJsonRef.current) {
+        queuedStatusJsonRef.current = false;
+        queueMicrotask(() => scheduleNanobotStatusJson());
+      }
+    },
+    [scheduleNanobotStatusJson],
+  );
 
   const { data: sessions, isPending: sessionsListPending } = useQuery({
     queryKey: ["sessions", currentBotId],
@@ -812,6 +1059,7 @@ export default function Chat() {
     displayMessages.length,
     streamingContent,
     streamingToolProgress.length,
+    streamingChannelNotices.length,
     streamingPayloadToolCalls.length,
     streamingReasoningContent,
     isStreaming,
@@ -819,6 +1067,47 @@ export default function Chat() {
 
   const handleStreamChunk = useCallback(
     (chunk: StreamChunk) => {
+      if (silentStatusJsonRef.current) {
+        if (chunk.type === "session_key") {
+          return;
+        }
+        if (chunk.type === "chat_start") {
+          return;
+        }
+        if (chunk.type === "chat_token") {
+          const t = typeof chunk.content === "string" ? chunk.content : "";
+          silentStatusJsonBufferRef.current += t;
+          const assembled = silentStatusJsonBufferRef.current;
+          if (parseNanobotStatusJson(assembled) !== null) {
+            completeSilentStatusJsonPoll(assembled, { fromEarlyParse: true });
+          }
+          return;
+        }
+        if (chunk.type === "channel_notice") {
+          const t = typeof chunk.content === "string" ? chunk.content : "";
+          silentStatusJsonBufferRef.current += t;
+          const assembled = silentStatusJsonBufferRef.current;
+          if (parseNanobotStatusJson(assembled) !== null) {
+            completeSilentStatusJsonPoll(assembled, { fromEarlyParse: true });
+          }
+          return;
+        }
+        if (chunk.type === "stream_frame_end") {
+          return;
+        }
+        if (chunk.type === "chat_done") {
+          const assembled =
+            silentStatusJsonBufferRef.current +
+            (typeof chunk.content === "string" ? chunk.content : "");
+          completeSilentStatusJsonPoll(assembled);
+          return;
+        }
+        if (chunk.type === "error" && chunk.error) {
+          completeSilentStatusJsonPoll("");
+          return;
+        }
+        return;
+      }
       if (chunk.type === "session_key" && chunk.session_key) {
         setCurrentSessionKey(chunk.session_key);
         navigate(`/chat/${encodeURIComponent(chunk.session_key)}`, {
@@ -827,6 +1116,12 @@ export default function Chat() {
         queryClient.invalidateQueries({ queryKey: ["sessions"] });
       } else if (chunk.type === "chat_start") {
         setIsStreaming(true);
+      } else if (chunk.type === "channel_notice" && chunk.content) {
+        setIsStreaming(true);
+        setStreamingChannelNotices((prev) => [
+          ...prev,
+          chunk.content as string,
+        ]);
       } else if (chunk.type === "chat_token") {
         const hasText =
           typeof chunk.content === "string" && chunk.content.length > 0;
@@ -949,6 +1244,7 @@ export default function Chat() {
           ),
         );
       } else if (chunk.type === "error" && chunk.error) {
+        setStreamingChannelNotices([]);
         setStreamingToolProgress([]);
         setToolCalls((prev) =>
           prev.map((tc) => ({ ...tc, status: "error", result: chunk.error })),
@@ -1002,6 +1298,20 @@ export default function Chat() {
           ),
         );
       } else if (chunk.type === "chat_done") {
+        if (expectStatusJsonTrailingChatDoneRef.current) {
+          const streamedText = streamingContentRef.current;
+          const fromChunk = resolveChatDonePrimaryText(chunk);
+          const hasReal =
+            fromChunk.trim().length > 0 ||
+            streamedText.trim().length > 0 ||
+            (chunk.tool_calls?.length ?? 0) > 0 ||
+            streamingPayloadToolCallsRef.current.length > 0 ||
+            streamingReasoningContentRef.current.length > 0;
+          expectStatusJsonTrailingChatDoneRef.current = false;
+          if (!hasReal) {
+            return;
+          }
+        }
         if (assistantReplyFinalizedRef.current) {
           return;
         }
@@ -1019,16 +1329,8 @@ export default function Chat() {
             ? chunk.reasoning_content
             : refReason || undefined;
         const streamedText = streamingContentRef.current;
-        const fromChunk =
-          chunk.content !== undefined && chunk.content !== ""
-            ? chunk.content
-            : streamedText;
-        const hasAssistantBody =
-          Boolean(fromChunk) ||
-          (mergedToolCalls?.length ?? 0) > 0 ||
-          (mergedReasoning !== undefined && mergedReasoning.length > 0);
-        const finalContent =
-          fromChunk || (hasAssistantBody ? "" : "Task completed.");
+        const primary = resolveChatDonePrimaryText(chunk);
+        const fromChunk = primary !== "" ? primary : streamedText;
         streamingContentRef.current = "";
         streamingPayloadToolCallsRef.current = [];
         streamingReasoningContentRef.current = "";
@@ -1037,10 +1339,11 @@ export default function Chat() {
         setIsStreaming(false);
         setStreamingContent("");
         setStreamingToolProgress([]);
+        setStreamingChannelNotices([]);
         const assistantMsg: Message = {
           id: `msg-${Date.now()}`,
           role: "assistant",
-          content: finalContent,
+          content: fromChunk,
           created_at: new Date().toISOString(),
           source: chunk.source ?? "main_agent",
           ...(mergedToolCalls && mergedToolCalls.length > 0
@@ -1066,6 +1369,9 @@ export default function Chat() {
             };
           },
         );
+        if (useNanobotChannel) {
+          scheduleNanobotStatusJson();
+        }
       }
     },
     [
@@ -1076,6 +1382,9 @@ export default function Chat() {
       activeSessionKey,
       currentBotId,
       cancelStreamTokenFlush,
+      completeSilentStatusJsonPoll,
+      scheduleNanobotStatusJson,
+      useNanobotChannel,
     ],
   );
 
@@ -1148,6 +1457,7 @@ export default function Chat() {
     streamingContentRef.current = "";
     setToolCalls([]);
     setStreamingToolProgress([]);
+    setStreamingChannelNotices([]);
     setStreamingPayloadToolCalls([]);
     setStreamingReasoningContent("");
     streamingPayloadToolCallsRef.current = [];
@@ -1237,6 +1547,7 @@ export default function Chat() {
     streamingContentRef.current = "";
     setToolCalls([]);
     setStreamingToolProgress([]);
+    setStreamingChannelNotices([]);
     setStreamingPayloadToolCalls([]);
     setStreamingReasoningContent("");
     streamingPayloadToolCallsRef.current = [];
@@ -1314,6 +1625,7 @@ export default function Chat() {
   const showStreamingAssistantBubble =
     isStreaming &&
     (Boolean(streamingContent) ||
+      streamingChannelNotices.length > 0 ||
       streamingToolProgress.length > 0 ||
       streamingPayloadToolCalls.length > 0 ||
       streamingReasoningContent.length > 0);
@@ -1567,6 +1879,28 @@ export default function Chat() {
                           <Bot className="w-5 h-5 text-gray-600 dark:text-gray-300" />
                         </div>
                         <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl px-5 py-4 shadow-sm min-w-0 flex-1 max-w-full mr-[calc(2.5rem+0.75rem)]">
+                          {streamingChannelNotices.length > 0 ? (
+                            <div className="space-y-2 mb-3 pb-3 border-b border-amber-200/70 dark:border-amber-700/50">
+                              <div className="flex items-center gap-2 pl-0.5">
+                                <Info
+                                  className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0"
+                                  strokeWidth={2}
+                                  aria-hidden
+                                />
+                                <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-700/90 dark:text-amber-400/90">
+                                  Status
+                                </span>
+                              </div>
+                              {streamingChannelNotices.map((line, idx) => (
+                                <p
+                                  key={`${idx}-${line.slice(0, 48)}`}
+                                  className="text-[12px] sm:text-[13px] leading-snug text-amber-950 dark:text-amber-100/95 m-0"
+                                >
+                                  {line}
+                                </p>
+                              ))}
+                            </div>
+                          ) : null}
                           {streamingReasoningContent.length > 0 ? (
                             <MessageThinkingBlock
                               text={streamingReasoningContent}
@@ -1575,7 +1909,8 @@ export default function Chat() {
                           {streamingPayloadToolCalls.length > 0 ? (
                             <div
                               className={
-                                streamingReasoningContent.length > 0
+                                streamingReasoningContent.length > 0 ||
+                                streamingChannelNotices.length > 0
                                   ? "mt-3 pt-3 border-t border-gray-100 dark:border-gray-700"
                                   : ""
                               }
@@ -1590,7 +1925,8 @@ export default function Chat() {
                             <div
                               className={`text-[15px] leading-relaxed text-gray-900 dark:text-gray-100 whitespace-pre-wrap break-words ${
                                 streamingReasoningContent.length > 0 ||
-                                streamingPayloadToolCalls.length > 0
+                                streamingPayloadToolCalls.length > 0 ||
+                                streamingChannelNotices.length > 0
                                   ? "mt-3 pt-3 border-t border-gray-100 dark:border-gray-700"
                                   : ""
                               }`}
@@ -1603,7 +1939,8 @@ export default function Chat() {
                               className={
                                 streamingContent ||
                                 streamingPayloadToolCalls.length > 0 ||
-                                streamingReasoningContent.length > 0
+                                streamingReasoningContent.length > 0 ||
+                                streamingChannelNotices.length > 0
                                   ? "mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 space-y-2"
                                   : "space-y-2"
                               }
@@ -1701,6 +2038,9 @@ export default function Chat() {
                 onSend={handleSend}
                 onStop={handleStop}
                 isStreaming={isStreaming}
+                showContextMeter={useNanobotChannel}
+                contextUsage={nanobotContextUsage}
+                contextLoading={statusJsonLoading}
               />
             </div>
           </div>

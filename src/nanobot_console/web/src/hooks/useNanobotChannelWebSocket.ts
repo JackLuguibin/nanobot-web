@@ -52,7 +52,8 @@ function optionalToolFrameFields(
 /**
  * Maps nanobot WS frames to StreamChunk.
  * `stream_end` = one streaming segment/frame finished (`stream_frame_end`).
- * `chat_end` = full assistant turn finished (`chat_done`).
+ * `message` = non-final channel text (retries, status); show until `chat_end`.
+ * `chat_end` = full assistant turn finished (`chat_done`); optional `text` for final body.
  */
 function mapNativeFrameToStreamChunk(
   data: Record<string, unknown>,
@@ -83,8 +84,10 @@ function mapNativeFrameToStreamChunk(
   }
   if (ev === "message") {
     const text = typeof data.text === "string" ? data.text : "";
-    const extra = optionalToolFrameFields(data);
-    return { type: "chat_done", content: text, ...extra };
+    if (!text.trim()) {
+      return null;
+    }
+    return { type: "channel_notice", content: text };
   }
   if (ev === "stream_end") {
     const extra = optionalToolFrameFields(data);
@@ -95,7 +98,11 @@ function mapNativeFrameToStreamChunk(
   }
   if (ev === "chat_end") {
     const extra = optionalToolFrameFields(data);
-    return { type: "chat_done", content: "", ...extra };
+    const textRaw =
+      (typeof data.text === "string" ? data.text : "") ||
+      (typeof data.content === "string" ? data.content : "") ||
+      (typeof data.message === "string" ? data.message : "");
+    return { type: "chat_done", content: textRaw, ...extra };
   }
   if (ev === "tool_event") {
     const mergedTools = mergeToolCallsWithResults(

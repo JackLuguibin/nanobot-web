@@ -108,7 +108,7 @@ export function useWebSocket() {
           const chatTypes = [
             'chat_token', 'chat_done', 'chat_start', 'stream_frame_end',
             'session_key', 'tool_call',
-            'tool_result', 'tool_progress', 'subagent_start',
+            'tool_result', 'tool_progress', 'channel_notice', 'subagent_start',
             'subagent_done', 'assistant_message', 'error',
           ];
           if (chatTypes.includes(message.type)) {
