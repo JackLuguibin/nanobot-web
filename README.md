@@ -78,6 +78,40 @@ Receive streaming and final text as:
 pip install -e .
 ```
 
+### Run all services (one command)
+
+Local development runs three processes together: **nanobot gateway**, the **console API server**, and the **web dev** stack (Vite). The repo root [`Procfile`](Procfile) defines them for [Honcho](https://github.com/nickstenning/honcho).
+
+Honcho is **not** a runtime dependency of this package: production installs should use `pip install .` (or your wheel) **without** pulling in process managers. Install Honcho only on machines where you run `honcho start`.
+
+1. Activate the project virtual environment (this repo expects `.venv` at the root; use `.venv/bin/honcho start` if you prefer not to activate).
+2. Install Honcho if it is not already available:
+
+   ```bash
+   pip install honcho
+   ```
+
+3. From the **repository root**, start everything:
+
+   ```bash
+   honcho start
+   ```
+
+Honcho reads `Procfile` and runs these processes in parallel:
+
+| Process   | Command |
+|-----------|---------|
+| `gateway` | `nanobot gateway` |
+| `server`  | `nanobot_console server` |
+| `web`     | `nanobot_console web dev` |
+
+The `web` process waits until the API and nanobot WebSocket are reachable (real handshake) before bringing up the frontend dev server. To skip that wait:
+
+- set `SKIP_GATEWAY_WAIT=1`, or
+- run `nanobot_console web dev --no-wait` (if you start `web` outside Honcho).
+
+Press **Ctrl+C** in the terminal where `honcho start` is running to stop **all** child processes.
+
 ### Linting
 
 ```bash
