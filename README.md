@@ -17,6 +17,8 @@ Enable the channel in `~/.nanobot/config.json` under `channels` using the key **
 ```json
 {
   "channels": {
+    "sendToolEvents": false,
+    "sendReasoningContent": true,
     "websocket": {
       "enabled": true,
       "host": "0.0.0.0",
@@ -24,7 +26,10 @@ Enable the channel in `~/.nanobot/config.json` under `channels` using the key **
       "path": "/",
       "allowFrom": ["*"],
       "streaming": true,
-      "websocketRequiresToken": false
+      "websocketRequiresToken": false,
+      "resumeChatId": true,
+      "deltaChunkChars": 5,
+      "maxDeltaBufferChars": 2097152
     }
   }
 }
@@ -43,14 +48,28 @@ For local development, set **`websocketRequiresToken`** to `false` unless you co
 | `websocketRequiresToken` | `bool` | `true` | Require `token` query param on connect when no static `token` is set |
 | `token` | `string` | `""` | Optional static shared secret for `?token=` |
 | `tokenIssuePath` | `string` | `""` | Optional HTTP path that issues short-lived tokens (see upstream docs) |
+| `resumeChatId` | `bool` | `true` | When `true`, clients may pass `?chat_id=<uuid>` to resume a persisted session; invalid UUID → HTTP 400 on handshake |
+| `deltaChunkChars` | `int` | `5` | When `> 0`, split outgoing stream text into `delta` frames of at most this many Unicode scalars; `0` passes through provider chunk sizes |
+| `maxDeltaBufferChars` | `int` | `2097152` | When `deltaChunkChars` > 0, cap buffered stream text per stream; overflow flushes early as extra `delta` frames (`0` = no cap) |
+
+Global **`channels`** options (not under `websocket` only):
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `sendToolEvents` | `bool` | `false` | Emit structured `tool_event` frames (`tool_calls` / `tool_results`) on WebSocket |
+| `sendReasoningContent` | `bool` | `true` | Push assistant `reasoning_content` (e.g. separate `reasoning` frame after streaming) |
 
 Empty `allowFrom` denies everyone; use `["*"]` or list specific client IDs.
+
+Wire protocol aligns with upstream [nanobot WebSocket changes](https://github.com/HKUDS/nanobot/pull/3216) (session lifecycle, optional chunked deltas, `chat_id` resume).
 
 ## Client usage
 
 Connect to:
 
-`ws://<host>:<port><path>?client_id=<id>&token=<optional>`
+`ws://<host>:<port><path>?client_id=<id>&token=<optional>&chat_id=<optional-uuid>`
+
+Use `chat_id` from a previous `ready` frame to resume the same persisted conversation (console passes this automatically when you open `/chat/websocket:<uuid>`). If two connections use the **same** `chat_id`, the newer connection replaces the older: the server closes the previous socket with code `1000` and reason `replaced by new connection`.
 
 The server sends a first frame:
 
@@ -58,19 +77,29 @@ The server sends a first frame:
 {"event": "ready", "chat_id": "<uuid>", "client_id": "..."}
 ```
 
-Send a user message as JSON with a text field the server accepts, for example:
+When resuming via `?chat_id=`:
+
+```json
+{"event": "ready", "chat_id": "<uuid>", "client_id": "...", "resumed": true}
+```
+
+Send a user message as a **JSON object** with a text field the server accepts (do not send a bare JSON array; it is ignored server-side), for example:
 
 ```json
 {"content": "Hello nanobot!"}
 ```
 
-Receive streaming and final text as:
+Typical streaming session (simplified):
 
 ```json
-{"event": "delta", "text": "..."}
-{"event": "message", "text": "..."}
-{"event": "stream_end"}
+{"event": "chat_start"}
+{"event": "delta", "text": "...", "stream_id": "<optional>"}
+{"event": "stream_end", "stream_id": "<optional>"}
+{"event": "reasoning", "text": "..."}
+{"event": "chat_end"}
 ```
+
+Non-streaming or final channel text may use `message` with optional `reasoning_content`. Enable **`sendToolEvents`** to receive `tool_event` frames with `tool_calls` / `tool_results`.
 
 ## Development
 

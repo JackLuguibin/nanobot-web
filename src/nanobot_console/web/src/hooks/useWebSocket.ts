@@ -110,6 +110,7 @@ export function useWebSocket() {
             'session_key', 'tool_call',
             'tool_result', 'tool_progress', 'channel_notice', 'subagent_start',
             'subagent_done', 'assistant_message', 'error',
+            'nanobot_status_json',
           ];
           if (chatTypes.includes(message.type)) {
             _dispatchChat(message as StreamChunk);

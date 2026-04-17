@@ -32,6 +32,7 @@ import {
 import {
   Bot,
   Check,
+  CheckCircle2,
   ChevronRight,
   Copy,
   MessageSquare,
@@ -356,35 +357,53 @@ function toolCallArgumentsPayloadScore(args: Record<string, unknown>): number {
 }
 
 /**
- * Merge successive chat_token tool_calls by id so a later frame with richer
- * arguments does not get overwritten by an empty snapshot.
+ * Merge successive chat_token / tool_event batches: keep prior tool calls and
+ * append new ids; for the same id, prefer richer arguments and latest result.
+ * (Nanobot often sends one batch per tool round — the old implementation only
+ * returned `incoming.length` entries and dropped earlier calls.)
  */
 function mergeStreamingToolCalls(prev: ToolCall[], incoming: ToolCall[]): ToolCall[] {
   if (incoming.length === 0) {
     return prev;
   }
-  const prevById = new Map(prev.map((tc) => [tc.id, tc] as const));
-  return incoming.map((tc) => {
-    const old = prevById.get(tc.id);
+  const byId = new Map<string, ToolCall>();
+  const order: string[] = [];
+
+  for (const tc of prev) {
+    if (!byId.has(tc.id)) {
+      order.push(tc.id);
+    }
+    byId.set(tc.id, tc);
+  }
+
+  for (const tc of incoming) {
+    const old = byId.get(tc.id);
     if (!old) {
-      return tc;
+      order.push(tc.id);
+      byId.set(tc.id, tc);
+      continue;
     }
     const scoreOld = toolCallArgumentsPayloadScore(old.arguments);
     const scoreNew = toolCallArgumentsPayloadScore(tc.arguments);
-    if (scoreNew >= scoreOld) {
-      return {
-        ...tc,
-        name: tc.name || old.name,
-        tool_call_type: tc.tool_call_type ?? old.tool_call_type,
-      };
-    }
-    return {
-      ...tc,
-      name: tc.name || old.name,
-      arguments: old.arguments,
-      tool_call_type: tc.tool_call_type ?? old.tool_call_type,
-    };
-  });
+    const merged =
+      scoreNew >= scoreOld
+        ? {
+            ...tc,
+            name: tc.name || old.name,
+            tool_call_type: tc.tool_call_type ?? old.tool_call_type,
+            result: tc.result !== undefined ? tc.result : old.result,
+          }
+        : {
+            ...tc,
+            name: tc.name || old.name,
+            arguments: old.arguments,
+            tool_call_type: tc.tool_call_type ?? old.tool_call_type,
+            result: tc.result !== undefined ? tc.result : old.result,
+          };
+    byId.set(tc.id, merged);
+  }
+
+  return order.map((id) => byId.get(id)!);
 }
 
 /**
@@ -677,6 +696,19 @@ function MessageToolCallsBlock({
                 <code className="text-[12px] sm:text-[13px] font-mono font-semibold text-slate-800 dark:text-slate-100 break-all leading-snug">
                   {tc.name}
                 </code>
+                {tc.result !== undefined ? (
+                  <span
+                    className="inline-flex shrink-0"
+                    title="Completed"
+                    aria-label="Tool call completed"
+                  >
+                    <CheckCircle2
+                      className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400"
+                      strokeWidth={2.25}
+                      aria-hidden
+                    />
+                  </span>
+                ) : null}
                 {preview ? (
                   <span
                     className="w-full sm:w-auto sm:flex-1 sm:min-w-0 text-[11px] text-slate-400 dark:text-slate-500 sm:text-right truncate pl-6 sm:pl-0"
@@ -1517,6 +1549,13 @@ export default function Chat() {
           ...prev,
           chunk.content as string,
         ]);
+        if (
+          typeof chunk.reasoning_content === "string" &&
+          chunk.reasoning_content.length > 0
+        ) {
+          streamingReasoningContentRef.current = chunk.reasoning_content;
+          setStreamingReasoningContent(chunk.reasoning_content);
+        }
       } else if (chunk.type === "chat_token") {
         const hasText =
           typeof chunk.content === "string" && chunk.content.length > 0;

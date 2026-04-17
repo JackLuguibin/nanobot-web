@@ -49,8 +49,32 @@ export interface NanobotNativeWsFrame {
   stream_id?: unknown;
   tool_calls?: unknown;
   reasoning_content?: string;
-  /** Payload for `/status_json` etc. when `text` is empty (see `mapNativeFrameToStreamChunk`). */
+  /** OutboundMessage.data — may carry status/command JSON (see `outboundDataHasStatusContext`). */
   data?: unknown;
+}
+
+/**
+ * Same shape checks as Chat `extractNanobotStatusContext` — outbound `message.data`
+ * may use `context` or nested `data.context`.
+ */
+function outboundDataHasStatusContext(root: Record<string, unknown>): boolean {
+  const direct = root.context;
+  if (direct !== undefined && typeof direct === "object" && direct !== null) {
+    return true;
+  }
+  const wrapped = root.data;
+  if (
+    wrapped !== undefined &&
+    typeof wrapped === "object" &&
+    wrapped !== null &&
+    !Array.isArray(wrapped)
+  ) {
+    const nested = (wrapped as Record<string, unknown>).context;
+    if (nested !== undefined && typeof nested === "object" && nested !== null) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function optionalToolFrameFields(
@@ -89,7 +113,11 @@ function mapNativeFrameToStreamChunk(
     if (!text && !extra.tool_calls && extra.reasoning_content === undefined) {
       return null;
     }
-    return { type: "chat_token", content: text, ...extra };
+    const chunk: StreamChunk = { type: "chat_token", content: text, ...extra };
+    if (data.stream_id !== undefined) {
+      chunk.stream_id = data.stream_id;
+    }
+    return chunk;
   }
   if (ev === "reasoning") {
     const text = typeof data.text === "string" ? data.text : "";
@@ -105,29 +133,43 @@ function mapNativeFrameToStreamChunk(
   }
   if (ev === "message") {
     const text = typeof data.text === "string" ? data.text : "";
-    if (text.trim()) {
-      return { type: "channel_notice", content: text };
-    }
+    const msgExtras = optionalToolFrameFields(data);
     const inner = data.data;
-    if (
+    const innerObj =
       inner !== undefined &&
       inner !== null &&
       typeof inner === "object" &&
       !Array.isArray(inner)
-    ) {
-      const ctx = (inner as Record<string, unknown>).context;
-      if (ctx !== undefined && typeof ctx === "object" && ctx !== null) {
+        ? (inner as Record<string, unknown>)
+        : null;
+
+    if (!text.trim()) {
+      if (innerObj && outboundDataHasStatusContext(innerObj)) {
         return {
           type: "nanobot_status_json",
-          content: JSON.stringify(inner),
+          content: JSON.stringify(innerObj),
         };
       }
+      if (msgExtras.reasoning_content !== undefined) {
+        return {
+          type: "chat_token",
+          content: "",
+          reasoning_content: msgExtras.reasoning_content,
+          reasoning_append: false,
+        };
+      }
+      return null;
     }
-    return null;
+
+    return { type: "channel_notice", content: text, ...msgExtras };
   }
   if (ev === "stream_end") {
     const extra = optionalToolFrameFields(data);
-    return { type: "stream_frame_end", ...extra };
+    const chunk: StreamChunk = { type: "stream_frame_end", ...extra };
+    if (data.stream_id !== undefined) {
+      chunk.stream_id = data.stream_id;
+    }
+    return chunk;
   }
   if (ev === "chat_start") {
     return { type: "chat_start" };
@@ -153,12 +195,15 @@ function mapNativeFrameToStreamChunk(
     const extra = optionalToolFrameFields(synthetic);
     if (
       text === "" &&
-      !extra.tool_calls &&
+      !extra.tool_calls?.length &&
       extra.reasoning_content === undefined
     ) {
       return null;
     }
     return { type: "chat_token", content: text, ...extra };
+  }
+  if (typeof ev === "string" && ev.length > 0) {
+    console.warn("[nanobot-ws] unmapped event (dropped):", ev, data);
   }
   return null;
 }
@@ -473,11 +518,14 @@ export function useNanobotChannelWebSocket(options: {
           }
         };
 
-        ws.onclose = () => {
+        ws.onclose = (closeEv) => {
           isConnectingRef.current = false;
           if (myGen !== connectGeneration) {
             return;
           }
+          const replacedByPeer =
+            closeEv.code === 1000 &&
+            closeEv.reason === "replaced by new connection";
           setNanobotChatId(null);
           const rk = canonicalFromRouteRef.current;
           if (!rk) {
@@ -486,6 +534,14 @@ export function useNanobotChannelWebSocket(options: {
           setReady(false);
           wsRef.current = null;
           if (cancelled) {
+            return;
+          }
+          if (replacedByPeer) {
+            useAppStore.getState().addToast({
+              type: "warning",
+              message:
+                "此 chat_id 已在其他标签页或窗口连接；本页连接已关闭且不会自动重连，请刷新或关闭重复页面。",
+            });
             return;
           }
           reconnectTimeoutRef.current = window.setTimeout(() => {

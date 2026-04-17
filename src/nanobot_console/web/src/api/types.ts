@@ -240,6 +240,8 @@ export interface StreamChunk {
   done?: boolean;
   /** 消息来源，用于 chat_done / assistant_message */
   source?: MessageSource;
+  /** nanobot `stream_end` / `delta` optional stream segment id (same id within one streamed segment). */
+  stream_id?: unknown;
   // Subagent event fields
   subagent_id?: string;
   label?: string;
