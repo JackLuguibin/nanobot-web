@@ -19,7 +19,7 @@ import {
 } from "../hooks/useNanobotChannelWebSocket";
 import { registerChatHandler, getWSRef } from "../hooks/useWebSocket";
 import * as api from "../api/client";
-import { Button, Tag, Popconfirm } from "antd";
+import { Button, Tag, Popconfirm, Checkbox } from "antd";
 import {
   PlusOutlined,
   LoadingOutlined,
@@ -849,6 +849,9 @@ export default function Chat() {
   const [sessionsSidebarOpen, setSessionsSidebarOpen] = useState(false);
   const [sessionsSidebarCollapsed, setSessionsSidebarCollapsed] =
     useState(false);
+  const [batchSelectedKeys, setBatchSelectedKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [toolCalls, setToolCalls] = useState<TrackedToolCall[]>([]);
   /** nanobot WebSocket 帧中的 tool_calls / reasoning_content（与正文并行展示） */
   const [streamingPayloadToolCalls, setStreamingPayloadToolCalls] = useState<
@@ -930,6 +933,18 @@ export default function Chat() {
     queryKey: ["sessions", currentBotId],
     queryFn: () => api.listSessions(currentBotId),
   });
+
+  useEffect(() => {
+    if (!sessions?.length) {
+      setBatchSelectedKeys((prev) => (prev.size === 0 ? prev : new Set()));
+      return;
+    }
+    const validKeys = new Set(sessions.map((s) => s.key));
+    setBatchSelectedKeys((prev) => {
+      const next = new Set([...prev].filter((k) => validKeys.has(k)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [sessions]);
 
   const onBareNanobotChatRoute =
     useNanobotChannel && paramSessionKey === undefined;
@@ -1304,6 +1319,98 @@ export default function Chat() {
     },
     onError: () => {
       addToast({ type: "error", message: "删除会话失败" });
+    },
+  });
+
+  const deleteSessionsBatchMutation = useMutation({
+    mutationFn: async (keys: string[]) => {
+      const keySet = new Set(keys);
+      const current = activeSessionKey?.trim() ?? "";
+      const isDeletingCurrent = current.length > 0 && keySet.has(current);
+
+      if (isDeletingCurrent) {
+        if (useNanobotChannel) {
+          disconnectNanobotChannelWebSocket();
+        }
+        suppressSessionDetailForKeyRef.current = current;
+        void queryClient.cancelQueries({
+          queryKey: ["session", current, currentBotId],
+        });
+        queryClient.removeQueries({
+          queryKey: ["session", current, currentBotId],
+        });
+
+        const list =
+          queryClient.getQueryData<SessionInfo[]>([
+            "sessions",
+            currentBotId,
+          ]) ?? [];
+        const remaining = list.filter((row) => !keySet.has(row.key));
+        const nextKey = pickNewestCreatedSessionKey(remaining);
+
+        queryClient.setQueryData<SessionInfo[]>(
+          ["sessions", currentBotId],
+          remaining,
+        );
+
+        flushSync(() => {
+          nanobotWsPlaceholderRef.current = null;
+          setCurrentSessionKey(null);
+          setMessages([]);
+          setShowSuggestions(true);
+          setSubagentTasks([]);
+          if (nextKey) {
+            navigate(`/chat/${encodeURIComponent(nextKey)}`, { replace: true });
+          } else {
+            navigate("/chat", { replace: true });
+          }
+          setSessionsSidebarOpen(false);
+        });
+      } else {
+        queryClient.setQueryData<SessionInfo[]>(
+          ["sessions", currentBotId],
+          (old) => (old ? old.filter((row) => !keySet.has(row.key)) : old),
+        );
+      }
+
+      return api.deleteSessionsBatch(keys, currentBotId);
+    },
+    onSuccess: (data, keys) => {
+      queryClient.invalidateQueries({ queryKey: ["sessions", currentBotId] });
+      for (const key of keys) {
+        queryClient.removeQueries({
+          queryKey: ["session", key, currentBotId],
+        });
+      }
+      try {
+        for (const key of keys) {
+          const stored = localStorage
+            .getItem(LAST_NANOBOT_SESSION_STORAGE_KEY)
+            ?.trim();
+          if (stored === key) {
+            localStorage.removeItem(LAST_NANOBOT_SESSION_STORAGE_KEY);
+          }
+        }
+      } catch {
+        // ignore
+      }
+      setBatchSelectedKeys(new Set());
+      const failed = data.failed?.length ?? 0;
+      const deleted = data.deleted?.length ?? 0;
+      if (failed > 0) {
+        addToast({
+          type: deleted > 0 ? "warning" : "error",
+          message: `已删除 ${deleted} 个，${failed} 个失败`,
+        });
+      } else {
+        addToast({ type: "success", message: `已删除 ${deleted} 个会话` });
+      }
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["sessions", currentBotId],
+      });
+      addToast({ type: "error", message: "批量删除失败" });
     },
   });
 
@@ -2104,13 +2211,88 @@ export default function Chat() {
       <div
         className={`
           ${sessionsSidebarOpen ? "translate-x-0" : "-translate-x-full"}
-          ${sessionsSidebarCollapsed ? "md:-translate-x-full md:w-0 md:pointer-events-none md:overflow-hidden" : "md:translate-x-0 md:w-64"}
+          ${sessionsSidebarCollapsed ? "md:-translate-x-full md:w-0 md:pointer-events-none md:overflow-hidden" : "md:translate-x-0 md:w-72"}
           fixed md:relative z-20 h-screen md:h-full
-          w-64 bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl border-r border-gray-200/50 dark:border-gray-700/50
+          w-72 bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl border-r border-gray-200/50 dark:border-gray-700/50
           flex flex-col transition-transform duration-300 ease-out
         `}
       >
-        <div className="flex-1 overflow-y-auto no-scrollbar p-3 space-y-2">
+        <div className="min-h-[3.25rem] shrink-0 px-3.5 py-2.5 flex items-center gap-3 border-b border-gray-200/50 dark:border-gray-700/50 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm min-w-0">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate min-w-0">
+              Sessions
+            </span>
+            {sessions && sessions.length > 0 ? (
+              <div className="flex items-center gap-2 shrink-0">
+                <Checkbox
+                  indeterminate={
+                    batchSelectedKeys.size > 0 &&
+                    batchSelectedKeys.size < sessions.length
+                  }
+                  checked={sessions.every((s) =>
+                    batchSelectedKeys.has(s.key),
+                  )}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setBatchSelectedKeys(new Set(sessions.map((s) => s.key)));
+                    } else {
+                      setBatchSelectedKeys(new Set());
+                    }
+                  }}
+                  title="全选"
+                />
+                {batchSelectedKeys.size > 0 ? (
+                  <span
+                    className="text-xs leading-none text-gray-500 dark:text-gray-400 tabular-nums min-w-[1.25rem]"
+                    title={`已选 ${batchSelectedKeys.size} 个`}
+                  >
+                    {batchSelectedKeys.size}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-0.5 shrink-0">
+            {sessions && sessions.length > 0 ? (
+              <Popconfirm
+                title="批量删除会话"
+                description={`确定删除已选的 ${batchSelectedKeys.size} 个会话？`}
+                onConfirm={() =>
+                  deleteSessionsBatchMutation.mutate([...batchSelectedKeys])
+                }
+                okText="删除"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+                disabled={batchSelectedKeys.size === 0}
+              >
+                <Button
+                  danger
+                  type="text"
+                  size="small"
+                  icon={<DeleteOutlined />}
+                  className="!w-9 !h-9 !min-w-9 flex items-center justify-center"
+                  disabled={
+                    batchSelectedKeys.size === 0 ||
+                    deleteSessionsBatchMutation.isPending
+                  }
+                  loading={deleteSessionsBatchMutation.isPending}
+                  title="批量删除"
+                />
+              </Popconfirm>
+            ) : null}
+            <Button
+              type="text"
+              icon={<MenuFoldOutlined />}
+              onClick={() => {
+                setSessionsSidebarCollapsed(true);
+                setSessionsSidebarOpen(false);
+              }}
+              className="!w-9 !h-9 !min-w-9 flex items-center justify-center"
+              title="收起会话列表"
+            />
+          </div>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-3.5 py-4 space-y-3">
           {sessions?.map((session) => (
             <div
               key={session.key}
@@ -2121,25 +2303,44 @@ export default function Chat() {
                   sessionSidebarRowRefs.current.delete(session.key);
                 }
               }}
-              className={`flex items-stretch rounded-xl transition-all ${
+              className={`flex items-stretch gap-2 rounded-xl transition-all ${
                 activeSessionKey === session.key
                   ? "bg-gradient-to-r from-primary-50 to-blue-50 dark:from-primary-900/30 dark:to-blue-900/20 text-primary-700 dark:text-primary-300"
                   : "hover:bg-gray-100 dark:hover:bg-gray-700/50"
               }`}
             >
+              <div className="flex items-center justify-center shrink-0 pl-3 pr-0.5 py-3">
+                <Checkbox
+                  checked={batchSelectedKeys.has(session.key)}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    const checked = e.target.checked;
+                    setBatchSelectedKeys((prev) => {
+                      const next = new Set(prev);
+                      if (checked) {
+                        next.add(session.key);
+                      } else {
+                        next.delete(session.key);
+                      }
+                      return next;
+                    });
+                  }}
+                />
+              </div>
               <button
                 type="button"
                 onClick={() => handleSelectSession(session.key)}
-                className="flex-1 min-w-0 text-left px-4 py-3 rounded-l-xl"
+                className="flex-1 min-w-0 text-left py-3.5 pr-2 rounded-l-xl"
               >
-                <span className="text-sm font-medium truncate block">
+                <span className="text-sm font-medium truncate block leading-snug">
                   {session.title || session.key}
                 </span>
-                <span className="text-xs text-gray-500 mt-1 block">
+                <span className="text-xs text-gray-500 mt-1.5 block leading-relaxed">
                   {session.message_count} messages
                 </span>
                 {session.created_at && (
-                  <span className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 block">
+                  <span className="text-xs text-gray-400 dark:text-gray-500 mt-1 block leading-relaxed">
                     {formatMessageTime(session.created_at)}
                   </span>
                 )}
@@ -2156,9 +2357,9 @@ export default function Chat() {
                   type="button"
                   onClick={(e) => e.stopPropagation()}
                   title="删除会话"
-                  className="self-center shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:text-gray-500 dark:hover:text-red-400 dark:hover:bg-red-500/10 transition-colors duration-150 mr-1"
+                  className="self-center shrink-0 w-9 h-9 mr-2 my-2 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:text-gray-500 dark:hover:text-red-400 dark:hover:bg-red-500/10 transition-colors duration-150"
                 >
-                  <DeleteOutlined className="text-sm" />
+                  <DeleteOutlined className="text-base" />
                 </button>
               </Popconfirm>
             </div>
@@ -2199,21 +2400,6 @@ export default function Chat() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                type="text"
-                icon={
-                  sessionsSidebarCollapsed ? (
-                    <MenuUnfoldOutlined />
-                  ) : (
-                    <MenuFoldOutlined />
-                  )
-                }
-                onClick={() => setSessionsSidebarCollapsed((prev) => !prev)}
-                className="!px-2 !py-1"
-                title={
-                  sessionsSidebarCollapsed ? "展开会话列表" : "收起会话列表"
-                }
-              />
               {sessions && sessions.length > 0 && (
                 <Button
                   type="primary"
