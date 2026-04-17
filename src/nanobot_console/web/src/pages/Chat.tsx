@@ -1864,6 +1864,14 @@ export default function Chat() {
     cancelStreamTokenFlush,
   ]);
 
+  /** After each nanobot channel `ready` (connect or reconnect), refresh context via `/status_json`. */
+  useEffect(() => {
+    if (!useNanobotChannel || !nanobotWsReady) {
+      return;
+    }
+    scheduleNanobotStatusJson();
+  }, [useNanobotChannel, nanobotWsReady, scheduleNanobotStatusJson]);
+
   const handleSend = async () => {
     if (!input.trim() || isStreaming) return;
 
