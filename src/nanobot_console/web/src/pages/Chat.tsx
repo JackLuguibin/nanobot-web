@@ -1394,9 +1394,14 @@ export default function Chat() {
     if (prev !== undefined && prev !== paramSessionKey) {
       setMessages([]);
     }
-    setShowSuggestions(!activeSessionKey);
+    // Bare `/chat`: always show the welcome hero. Do not tie this to `activeSessionKey`:
+    // nanobot promotes `/chat` → `/chat/:id` before the first message, but the session
+    // is still empty and should keep the hero until the user sends or history loads.
+    if (paramSessionKey === undefined) {
+      setShowSuggestions(true);
+    }
     prevParamSessionKeyForMessagesRef.current = paramSessionKey;
-  }, [paramSessionKey, activeSessionKey]);
+  }, [paramSessionKey]);
 
   useEffect(() => {
     if (sessionData?.messages && !isStreaming) {
@@ -1409,7 +1414,7 @@ export default function Chat() {
           id: `msg-${idx}-${Date.now()}`,
         }));
       });
-      setShowSuggestions(false);
+      setShowSuggestions(serverMessages.length === 0);
     } else if (sessionData?.messages && isStreaming) {
       // Stream just started and getSession returned a session (user message is already in it).
       // Load those messages so the user message appears immediately.
