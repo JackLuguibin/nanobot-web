@@ -651,11 +651,10 @@ function MessageToolCallsBlock({
   /** 外层已有分隔/间距时置为 true，避免重复上边距 */
   noTopMargin?: boolean;
 }) {
-  const list = tool_calls ?? [];
-  const normalizedList = useMemo(
-    () => normalizeToolCallsArray(list as unknown),
-    [list],
-  );
+  const normalizedList = useMemo(() => {
+    const list = tool_calls ?? [];
+    return normalizeToolCallsArray(list as unknown);
+  }, [tool_calls]);
 
   if (normalizedList.length === 0) {
     return null;

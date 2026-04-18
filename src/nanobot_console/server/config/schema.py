@@ -30,6 +30,12 @@ class ServerSettings(BaseSettings):
     cors_origins: list[str] = Field(
         default=["*"], description="Allowed CORS origins"
     )
+    cors_allow_credentials: bool = Field(
+        default=True,
+        description=(
+            "Send Access-Control-Allow-Credentials; ignored when any origin is '*'"
+        ),
+    )
     title: str = Field(default="nanobot-console", description="API title")
     description: str = Field(
         default="HTTP API for nanobot console management",

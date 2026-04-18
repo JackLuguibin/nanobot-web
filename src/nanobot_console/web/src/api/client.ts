@@ -35,16 +35,40 @@ function appendBotQuery(url: string, botId?: string | null): string {
   return `${url}${sep}bot_id=${encodeURIComponent(botId)}`;
 }
 
-/** 从错误响应 body 中取出可展示的报错原因 */
+/** Extract a human-readable message from API error JSON bodies. */
 function getErrorMessage(body: unknown, fallback: string): string {
-  if (body && typeof body === 'object' && 'message' in body && typeof (body as { message: unknown }).message === 'string') {
-    return (body as { message: string }).message;
+  if (!body || typeof body !== 'object') {
+    return fallback;
   }
-  if (body && typeof body === 'object' && 'detail' in body) {
-    const d = (body as { detail: unknown }).detail;
+  const o = body as Record<string, unknown>;
+
+  if (
+    'error' in o &&
+    o.error &&
+    typeof o.error === 'object' &&
+    typeof (o.error as { message?: unknown }).message === 'string'
+  ) {
+    return (o.error as { message: string }).message;
+  }
+
+  if ('detail' in o) {
+    const d = o.detail;
     if (typeof d === 'string') return d;
-    if (Array.isArray(d) && d.length) return d.map((x) => String(x)).join('; ');
+    if (Array.isArray(d) && d.length) {
+      return d
+        .map((x) =>
+          typeof x === 'object' && x && 'msg' in x
+            ? String((x as { msg: unknown }).msg)
+            : String(x)
+        )
+        .join('; ');
+    }
   }
+
+  if (typeof o.message === 'string') {
+    return o.message;
+  }
+
   return fallback;
 }
 

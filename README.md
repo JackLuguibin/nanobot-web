@@ -114,7 +114,7 @@ Local development runs three processes together: **nanobot gateway**, the **cons
 Honcho is **not** a runtime dependency of this package: production installs should use `pip install .` (or your wheel) **without** pulling in process managers. Install Honcho only on machines where you run `honcho start`.
 
 1. Activate the project virtual environment (this repo expects `.venv` at the root; use `.venv/bin/honcho start` if you prefer not to activate).
-2. Install Honcho if it is not already available:
+2. Install Honcho if it is not already available (`pip install -e ".[dev]"` includes it):
 
    ```bash
    pip install honcho

@@ -217,7 +217,7 @@ export function useWebSocket() {
         wsRef.current = null;
       }
     };
-  }, []);
+  }, [connect]);
 
   return wsRef;
 }

@@ -17,7 +17,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "nanobot-ai @ git+https://github.com/JackLuguibin/nanobot@feat/enhance_ws_tool_event",
+    # Pinned to branch tip for reproducible installs; bump when you need newer nanobot.
+    "nanobot-ai @ git+https://github.com/JackLuguibin/nanobot@3c75fde938b539944f26583ce89e4bff17d16efc",
     "websockets>=12",
     "loguru>=0.7.0",
     "fastapi>=0.110.0",
