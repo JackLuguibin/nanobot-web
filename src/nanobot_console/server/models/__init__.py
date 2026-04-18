@@ -59,6 +59,7 @@ from nanobot_console.server.models.sessions import (
 from nanobot_console.server.models.skills import (
     InstallFromRegistryBody,
     RegistrySearchItem,
+    SkillBundleUpdateBody,
     SkillContentBody,
     SkillContentResponse,
     SkillCreateBody,
@@ -129,6 +130,7 @@ __all__ = [
     "SessionInfo",
     "SessionMessagesPayload",
     "SetDefaultBotBody",
+    "SkillBundleUpdateBody",
     "SkillContentBody",
     "SkillContentResponse",
     "SkillCreateBody",

@@ -360,17 +360,61 @@ export async function updateSkillContent(
   );
 }
 
-export async function createSkill(
-  data: { name: string; description: string; content?: string },
+export async function updateSkillBundle(
+  name: string,
+  data: {
+    content: string;
+    files?: Record<string, string>;
+    directories?: string[];
+    delete_rels?: string[];
+  },
   botId?: string | null
 ): Promise<{ status: string; name: string }> {
+  const payload: Record<string, unknown> = {
+    content: data.content,
+  };
+  if (data.files && Object.keys(data.files).length > 0) {
+    payload.files = data.files;
+  }
+  if (data.directories && data.directories.length > 0) {
+    payload.directories = data.directories;
+  }
+  if (data.delete_rels && data.delete_rels.length > 0) {
+    payload.delete_rels = data.delete_rels;
+  }
+  return fetchJson(
+    appendBotQuery(`${API_BASE}/skills/${encodeURIComponent(name)}/bundle`, botId),
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function createSkill(
+  data: {
+    name: string;
+    description: string;
+    content?: string;
+    files?: Record<string, string>;
+    directories?: string[];
+  },
+  botId?: string | null
+): Promise<{ status: string; name: string }> {
+  const payload: Record<string, unknown> = {
+    name: data.name,
+    description: data.description,
+    content: data.content || '',
+  };
+  if (data.files && Object.keys(data.files).length > 0) {
+    payload.files = data.files;
+  }
+  if (data.directories && data.directories.length > 0) {
+    payload.directories = data.directories;
+  }
   return fetchJson(`${API_BASE}/skills${botQuery(botId)}`, {
     method: 'POST',
-    body: JSON.stringify({
-      name: data.name,
-      description: data.description,
-      content: data.content || '',
-    }),
+    body: JSON.stringify(payload),
   });
 }
 

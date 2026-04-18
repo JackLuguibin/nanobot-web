@@ -45,6 +45,19 @@ class SkillCreateBody(BaseModel):
     name: str
     description: str
     content: str = ""
+    files: dict[str, str] | None = None
+    directories: list[str] | None = None
+
+
+class SkillBundleUpdateBody(BaseModel):
+    """PUT /skills/{name}/bundle body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    content: str = ""
+    files: dict[str, str] | None = None
+    directories: list[str] | None = None
+    delete_rels: list[str] | None = None
 
 
 class RegistrySearchItem(BaseModel):

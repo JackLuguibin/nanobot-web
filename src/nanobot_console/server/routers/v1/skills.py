@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -10,12 +11,16 @@ from nanobot_console.server.bot_workspace import (
     iter_workspace_skill_dirs,
     read_text,
     skill_description_preview,
+    validate_skill_bundle_dir_rel_path,
+    validate_skill_bundle_rel_path,
     validate_skill_name,
+    workspace_skill_dir,
     workspace_skill_md_path,
     write_text,
 )
 from nanobot_console.server.models import (
     DataResponse,
+    SkillBundleUpdateBody,
     SkillContentResponse,
     SkillCreateBody,
     SkillInfo,
@@ -167,18 +172,150 @@ async def update_skill_content(
     return DataResponse(data=OkWithName(name=name))
 
 
+@router.put("/skills/{name}/bundle", response_model=DataResponse[OkWithName])
+async def update_skill_bundle(
+    name: str,
+    body: SkillBundleUpdateBody,
+    bot_id: str | None = Query(default=None, alias="bot_id"),
+) -> DataResponse[OkWithName]:
+    """Update workspace skill bundle (SKILL.md, files, dirs) and optional removals."""
+    skill_name = validate_skill_name(name)
+    wpath = workspace_skill_md_path(bot_id, skill_name)
+    if not wpath.is_file():
+        raise HTTPException(status_code=404, detail="Workspace skill not found")
+    skill_root = wpath.parent.resolve()
+
+    if body.delete_rels:
+        seen_del: set[str] = set()
+        normalized_deletes: list[str] = []
+        for raw in body.delete_rels:
+            rel = validate_skill_bundle_rel_path(raw)
+            if rel in seen_del:
+                continue
+            seen_del.add(rel)
+            normalized_deletes.append(rel)
+        for rel in sorted(normalized_deletes, key=len, reverse=True):
+            target = (skill_root / rel).resolve()
+            try:
+                target.relative_to(skill_root)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400, detail="Path escapes skill folder"
+                ) from exc
+            if not target.exists():
+                continue
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+
+    file_map: dict[str, str] = {}
+    if body.files:
+        seen_files: set[str] = set()
+        for raw_key, file_content in body.files.items():
+            rel = validate_skill_bundle_rel_path(raw_key)
+            if rel in seen_files:
+                raise HTTPException(status_code=400, detail="Duplicate file path")
+            seen_files.add(rel)
+            file_map[rel] = file_content
+
+    dir_set: set[str] = set()
+    if body.directories:
+        for raw in body.directories:
+            d = validate_skill_bundle_dir_rel_path(raw)
+            if d in dir_set:
+                raise HTTPException(
+                    status_code=400, detail="Duplicate directory path"
+                )
+            dir_set.add(d)
+
+    if set(file_map) & dir_set:
+        raise HTTPException(
+            status_code=400, detail="Path is both file and directory"
+        )
+
+    for d in sorted(dir_set, key=len):
+        target = (skill_root / d).resolve()
+        try:
+            target.relative_to(skill_root)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail="Path escapes skill folder"
+            ) from exc
+        target.mkdir(parents=True, exist_ok=True)
+
+    for rel, file_content in file_map.items():
+        target = (skill_root / rel).resolve()
+        try:
+            target.relative_to(skill_root)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail="Path escapes skill folder"
+            ) from exc
+        write_text(target, file_content)
+
+    write_text(wpath, body.content)
+    return DataResponse(data=OkWithName(name=skill_name))
+
+
 @router.post("/skills", response_model=DataResponse[OkWithName])
 async def create_skill(
     body: SkillCreateBody,
     bot_id: str | None = Query(default=None, alias="bot_id"),
 ) -> DataResponse[OkWithName]:
-    """Create ``.cursor/skills/<name>/SKILL.md``."""
+    """Create skill bundle: ``SKILL.md``, optional dirs, optional extra files."""
     name = validate_skill_name(body.name)
     wpath = workspace_skill_md_path(bot_id, name)
     if wpath.is_file():
         raise HTTPException(status_code=400, detail="Skill already exists")
     content = body.content or f"# {name}\n\n{body.description}\n"
     write_text(wpath, content)
+    skill_root = wpath.parent.resolve()
+
+    file_map: dict[str, str] = {}
+    if body.files:
+        seen_files: set[str] = set()
+        for raw_key, file_content in body.files.items():
+            rel = validate_skill_bundle_rel_path(raw_key)
+            if rel in seen_files:
+                raise HTTPException(status_code=400, detail="Duplicate file path")
+            seen_files.add(rel)
+            file_map[rel] = file_content
+
+    dir_set: set[str] = set()
+    if body.directories:
+        for raw in body.directories:
+            d = validate_skill_bundle_dir_rel_path(raw)
+            if d in dir_set:
+                raise HTTPException(
+                    status_code=400, detail="Duplicate directory path"
+                )
+            dir_set.add(d)
+
+    if set(file_map) & dir_set:
+        raise HTTPException(
+            status_code=400, detail="Path is both file and directory"
+        )
+
+    for d in sorted(dir_set, key=len):
+        target = (skill_root / d).resolve()
+        try:
+            target.relative_to(skill_root)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail="Path escapes skill folder"
+            ) from exc
+        target.mkdir(parents=True, exist_ok=True)
+
+    for rel, file_content in file_map.items():
+        target = (skill_root / rel).resolve()
+        try:
+            target.relative_to(skill_root)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail="Path escapes skill folder"
+            ) from exc
+        write_text(target, file_content)
     return DataResponse(data=OkWithName(name=name))
 
 
@@ -187,21 +324,16 @@ async def delete_skill(
     name: str,
     bot_id: str | None = Query(default=None, alias="bot_id"),
 ) -> DataResponse[OkWithName]:
-    """Delete a workspace skill file (and empty parent directory)."""
+    """Delete a workspace skill bundle (``SKILL.md`` and sibling files)."""
     validate_skill_name(name)
     wpath = workspace_skill_md_path(bot_id, name)
     if not wpath.is_file():
         raise HTTPException(status_code=404, detail="Workspace skill not found")
+    skill_dir = workspace_skill_dir(bot_id, name)
     try:
-        wpath.unlink()
+        shutil.rmtree(skill_dir)
     except OSError as exc:
         raise HTTPException(status_code=500, detail="Failed to delete skill") from exc
-    parent = wpath.parent
-    try:
-        if parent.is_dir() and not any(parent.iterdir()):
-            parent.rmdir()
-    except OSError:
-        pass
     return DataResponse(data=OkWithName(name=name))
 
 

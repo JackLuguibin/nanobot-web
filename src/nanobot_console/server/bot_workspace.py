@@ -212,10 +212,40 @@ def validate_skill_name(name: str) -> str:
     return n
 
 
+def workspace_skill_dir(bot_id: str | None, name: str) -> Path:
+    """``<workspace>/.cursor/skills/<name>`` (skill bundle root)."""
+    n = validate_skill_name(name)
+    return workspace_root(bot_id) / _CURSOR_SKILLS / n
+
+
 def workspace_skill_md_path(bot_id: str | None, name: str) -> Path:
     """``<workspace>/.cursor/skills/<name>/SKILL.md``."""
-    n = validate_skill_name(name)
-    return workspace_root(bot_id) / _CURSOR_SKILLS / n / "SKILL.md"
+    return workspace_skill_dir(bot_id, name) / "SKILL.md"
+
+
+def validate_skill_bundle_rel_path(raw: str) -> str:
+    """Normalize a path under a skill folder; forbid ``SKILL.md`` and traversal."""
+    normalized = _normalize_rel_path(raw)
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Invalid file path")
+    last = Path(normalized).parts[-1]
+    if last.upper() == "SKILL.MD":
+        raise HTTPException(
+            status_code=400,
+            detail="SKILL.md must be set via the main content field",
+        )
+    return normalized
+
+
+def validate_skill_bundle_dir_rel_path(raw: str) -> str:
+    """Normalize a directory path under a skill bundle (no ``SKILL.md`` segment)."""
+    normalized = _normalize_rel_path(raw)
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Invalid directory path")
+    last = Path(normalized).parts[-1]
+    if last.upper() == "SKILL.MD":
+        raise HTTPException(status_code=400, detail="Invalid directory name")
+    return normalized
 
 
 def iter_workspace_skill_dirs(bot_id: str | None) -> list[Path]:
