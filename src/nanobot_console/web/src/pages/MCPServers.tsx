@@ -28,6 +28,7 @@ import {
 } from '@ant-design/icons';
 import { Plug } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import * as api from '../api/client';
 import { useAppStore } from '../store';
 
@@ -49,6 +50,7 @@ const EXAMPLE_CONFIG = `{
 }`;
 
 export default function MCPServers() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { addToast, currentBotId, setCurrentBotId } = useAppStore();
   const [selectedServer, setSelectedServer] = useState<string | null>(null);
@@ -103,9 +105,9 @@ export default function MCPServers() {
   const copyConfig = async () => {
     try {
       await navigator.clipboard.writeText(EXAMPLE_CONFIG);
-      addToast({ type: 'success', message: '配置已复制到剪贴板' });
+      addToast({ type: 'success', message: t('mcp.copied') });
     } catch {
-      addToast({ type: 'error', message: '复制失败' });
+      addToast({ type: 'error', message: t('mcp.copyFailed') });
     }
   };
 

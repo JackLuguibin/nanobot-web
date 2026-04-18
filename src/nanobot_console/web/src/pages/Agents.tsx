@@ -29,28 +29,29 @@ import {
   EyeInvisibleOutlined,
 } from '@ant-design/icons';
 import { Bot, Radio } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import * as api from '../api/client';
 import type { Agent, AgentCreateRequest } from '../api/types_agents';
 
 const { TextArea } = Input;
 
-// Built-in categories (never persisted; always available)
-const BUILTIN_CATEGORIES = [
-  { key: 'all', label: 'All', color: '#1890ff' },
-  { key: 'general', label: 'General', color: '#52c41a' },
-  { key: 'content', label: 'Content', color: '#ff7875' },
-  { key: 'office', label: 'Office', color: '#faad14' },
+// Built-in category keys (labels come from i18n)
+const BUILTIN_CATEGORY_META: readonly { key: string; color: string }[] = [
+  { key: 'all', color: '#1890ff' },
+  { key: 'general', color: '#52c41a' },
+  { key: 'content', color: '#ff7875' },
+  { key: 'office', color: '#faad14' },
 ] as const;
 
 type CategoryDef = { key: string; label: string; color: string };
 
-function findCategoryConfig(key: string, custom: CategoryDef[]): CategoryDef {
-  const built = BUILTIN_CATEGORIES.find((c) => c.key === key);
+function findCategoryConfig(key: string, builtin: CategoryDef[], custom: CategoryDef[]): CategoryDef {
+  const built = builtin.find((c) => c.key === key);
   if (built) return { ...built };
   const c = custom.find((x) => x.key === key);
   if (c) return c;
-  return { ...BUILTIN_CATEGORIES[1] };
+  return { ...builtin[1] };
 }
 
 // Infer category from agent name or description
@@ -75,6 +76,7 @@ function resolveAgentCategory(agent: Agent, overrides: Record<string, string>): 
 }
 
 export default function Agents() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { currentBotId, addToast } = useAppStore();
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -137,9 +139,18 @@ export default function Agents() {
     enabled: !!currentBotId,
   });
 
+  const builtinCategories = useMemo<CategoryDef[]>(
+    () =>
+      BUILTIN_CATEGORY_META.map((c) => ({
+        ...c,
+        label: t(`agents.builtIn.${c.key}`),
+      })),
+    [t],
+  );
+
   const allCategoryTabs = useMemo(
-    () => [...BUILTIN_CATEGORIES.map((c) => ({ ...c })), ...customCategories],
-    [customCategories],
+    () => [...builtinCategories, ...customCategories],
+    [builtinCategories, customCategories],
   );
 
   const selectableCategories = useMemo(
@@ -162,10 +173,10 @@ export default function Agents() {
       setSelectedCategory(cat.key);
       setNewCategoryName('');
       setAddCategoryModalOpen(false);
-      addToast({ type: 'success', message: `Category "${cat.label}" added` });
+      addToast({ type: 'success', message: t('agents.categoryAdded', { name: cat.label }) });
     },
     onError: (err: Error) => {
-      addToast({ type: 'error', message: `Failed to add category: ${err.message}` });
+      addToast({ type: 'error', message: t('agents.categoryAddFailed', { error: err.message }) });
     },
   });
 
@@ -175,12 +186,12 @@ export default function Agents() {
     onSuccess: (agent) => {
       queryClient.invalidateQueries({ queryKey: ['agents', currentBotId] });
       queryClient.invalidateQueries({ queryKey: ['agents-status', currentBotId] });
-      addToast({ type: 'success', message: `Agent "${agent.name}" created` });
+      addToast({ type: 'success', message: t('agents.created', { name: agent.name }) });
       setCreateModalOpen(false);
       resetForm();
     },
     onError: (err: Error) => {
-      addToast({ type: 'error', message: `Failed to create: ${err.message}` });
+      addToast({ type: 'error', message: t('agents.createFailed', { error: err.message }) });
     },
   });
 
@@ -195,12 +206,12 @@ export default function Agents() {
     }) => api.updateAgent(currentBotId!, agentId, data),
     onSuccess: (agent) => {
       queryClient.invalidateQueries({ queryKey: ['agents', currentBotId] });
-      addToast({ type: 'success', message: `Agent "${agent.name}" updated` });
+      addToast({ type: 'success', message: t('agents.updated', { name: agent.name }) });
       setEditModalOpen(false);
       setSelectedAgent(null);
     },
     onError: (err: Error) => {
-      addToast({ type: 'error', message: `Failed to update: ${err.message}` });
+      addToast({ type: 'error', message: t('agents.updateFailed', { error: err.message }) });
     },
   });
 
@@ -209,10 +220,10 @@ export default function Agents() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agents', currentBotId] });
       queryClient.invalidateQueries({ queryKey: ['agents-status', currentBotId] });
-      addToast({ type: 'success', message: 'Agent deleted' });
+      addToast({ type: 'success', message: t('agents.deleted') });
     },
     onError: (err: Error) => {
-      addToast({ type: 'error', message: `Failed to delete: ${err.message}` });
+      addToast({ type: 'error', message: t('agents.deleteFailed', { error: err.message }) });
     },
   });
 
@@ -221,10 +232,10 @@ export default function Agents() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agents', currentBotId] });
       queryClient.invalidateQueries({ queryKey: ['agents-status', currentBotId] });
-      addToast({ type: 'success', message: 'Agent disabled' });
+      addToast({ type: 'success', message: t('agents.disabled') });
     },
     onError: (err: Error) => {
-      addToast({ type: 'error', message: `Failed to disable: ${err.message}` });
+      addToast({ type: 'error', message: t('agents.disableFailed', { error: err.message }) });
     },
   });
 
@@ -252,7 +263,7 @@ export default function Agents() {
   const handleConfirmAddCategory = () => {
     const label = newCategoryName.trim();
     if (!label) {
-      addToast({ type: 'error', message: 'Please enter a category name' });
+      addToast({ type: 'error', message: t('agents.categoryNameRequired') });
       return;
     }
     addCategoryMutation.mutate(label);
@@ -300,7 +311,7 @@ export default function Agents() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    addToast({ type: 'success', message: 'Export successful' });
+    addToast({ type: 'success', message: t('agents.exportOk') });
   };
 
   const handleImport = async (file: File) => {
@@ -309,7 +320,7 @@ export default function Agents() {
       const importedAgents = JSON.parse(text);
 
       if (!Array.isArray(importedAgents)) {
-        throw new Error('Invalid import file format');
+        throw new Error(t('agents.importInvalidFormat'));
       }
 
       let successCount = 0;
@@ -338,11 +349,17 @@ export default function Agents() {
       queryClient.invalidateQueries({ queryKey: ['agents', currentBotId] });
       addToast({
         type: successCount > 0 ? 'success' : 'error',
-        message: `Import complete: ${successCount} succeeded, ${errorCount} failed`,
+        message: t('agents.importComplete', { success: successCount, failed: errorCount }),
       });
       setImportModalOpen(false);
     } catch (err) {
-      addToast({ type: 'error', message: `Import failed: ${err instanceof Error ? err.message : 'Unknown error'}` });
+      addToast({
+        type: 'error',
+        message: t('agents.importFailed', {
+          error:
+            err instanceof Error ? err.message : t('agents.importUnknownError'),
+        }),
+      });
     }
   };
 
@@ -369,7 +386,7 @@ export default function Agents() {
   if (!currentBotId) {
     return (
       <div className="p-6 flex flex-col flex-1 min-h-0">
-        <Empty description="Please select a Bot first" className="py-20" />
+        <Empty description={t('agents.selectBotFirst')} className="py-20" />
       </div>
     );
   }
@@ -380,10 +397,10 @@ export default function Agents() {
       <div className="flex items-center justify-between shrink-0 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            Agents
+            {t('agents.title')}
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 hidden sm:block">
-            Manage multiple AI Agents, each with independent configuration and capabilities
+            {t('agents.subtitle')}
           </p>
         </div>
         <Space align="center" size="middle">
@@ -393,7 +410,7 @@ export default function Agents() {
               color={systemStatus.zmq_initialized ? 'success' : 'default'}
               className="!m-0"
             >
-              ZeroMQ: {systemStatus.zmq_initialized ? 'Connected' : 'Disconnected'}
+              {t('agents.zmq')}: {systemStatus.zmq_initialized ? t('agents.zmqConnected') : t('agents.zmqDisconnected')}
             </Tag>
           )}
           <Button
@@ -401,14 +418,14 @@ export default function Agents() {
             onClick={() => refetch()}
             className="border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500"
           >
-            <span className="hidden sm:inline">Refresh</span>
+            <span className="hidden sm:inline">{t('common.refresh')}</span>
           </Button>
           <Button
             icon={<UploadOutlined />}
             onClick={() => setImportModalOpen(true)}
             className="border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500"
           >
-            <span className="hidden sm:inline">Import</span>
+            <span className="hidden sm:inline">{t('agents.import')}</span>
           </Button>
           <Button
             type="primary"
@@ -419,7 +436,7 @@ export default function Agents() {
             }}
             className="shadow-md shadow-blue-500/25"
           >
-            <span className="hidden sm:inline">New Agent</span>
+            <span className="hidden sm:inline">{t('agents.newAgent')}</span>
           </Button>
         </Space>
       </div>
@@ -450,7 +467,7 @@ export default function Agents() {
           }}
           className="px-5 py-2 rounded-full text-sm font-medium border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all"
         >
-          + Add Category
+          {t('agents.addCategory')}
         </button>
       </div>
 
@@ -460,13 +477,13 @@ export default function Agents() {
           <Spin size="large" />
         </div>
       ) : error ? (
-        <Empty description={`Error: ${(error as Error).message}`} className="py-12 shrink-0" />
+        <Empty description={t('agents.loadError', { error: (error as Error).message })} className="py-12 shrink-0" />
       ) : filteredAgents.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
           <Empty
             description={
               <span className="text-gray-500 dark:text-gray-400">
-                No agents yet — click the button above to create one
+                {t('agents.emptyHint')}
               </span>
             }
             className="py-12"
@@ -476,7 +493,7 @@ export default function Agents() {
         <div className="w-full grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {filteredAgents.map((agent) => {
             const category = resolveAgentCategory(agent, categoryOverrides);
-            const categoryConfig = findCategoryConfig(category, customCategories);
+            const categoryConfig = findCategoryConfig(category, builtinCategories, customCategories);
             const isSelected = selectedAgents.has(agent.id);
             
             return (
@@ -526,7 +543,7 @@ export default function Agents() {
                             className="text-xs !m-0 border-0 px-1.5 py-0.5 rounded-md leading-none dark:!bg-[#2a1f4a] dark:!text-[#b37feb]"
                             style={{ backgroundColor: '#f0f0ff', color: '#722ed1' }}
                           >
-                            SYS
+                            {t('agents.tagSys')}
                           </Tag>
                         )}
                       </div>
@@ -540,7 +557,7 @@ export default function Agents() {
 
                   {/* Action buttons */}
                   <div className="flex items-center justify-end gap-0.5 pt-2.5 mt-0.5 border-t border-gray-100 dark:border-gray-700">
-                    <Tooltip title="Edit">
+                    <Tooltip title={t('agents.tooltipEdit')}>
                       <Button
                         type="text"
                         size="small"
@@ -552,7 +569,7 @@ export default function Agents() {
                         className="text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 !px-1"
                       />
                     </Tooltip>
-                    <Tooltip title="Export">
+                    <Tooltip title={t('common.export')}>
                       <Button
                         type="text"
                         size="small"
@@ -569,23 +586,23 @@ export default function Agents() {
                           link.click();
                           document.body.removeChild(link);
                           URL.revokeObjectURL(url);
-                      addToast({ type: 'success', message: 'Export successful' });
+                          addToast({ type: 'success', message: t('agents.exportOk') });
                         }}
                         className="text-gray-500 dark:text-gray-400 hover:text-green-500 dark:hover:text-green-400 !px-1"
                       />
                     </Tooltip>
                     <Popconfirm
-                      title="Confirm Hide"
-                      description="Are you sure you want to hide this Agent?"
+                      title={t('agents.hideConfirmTitle')}
+                      description={t('agents.hideConfirmDescription')}
                       onConfirm={(e) => {
                         e?.stopPropagation();
                         disableMutation.mutate(agent.id);
                       }}
-                      okText="Hide"
-                      cancelText="Cancel"
+                      okText={t('agents.hide')}
+                      cancelText={t('common.cancel')}
                       okButtonProps={{ danger: true }}
                     >
-                      <Tooltip title="Hide">
+                      <Tooltip title={t('agents.hide')}>
                         <Button
                           type="text"
                           size="small"
@@ -609,14 +626,14 @@ export default function Agents() {
           <Card className="shadow-xl border border-gray-200 dark:border-gray-700 rounded-xl">
             <Space size="middle">
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  <span className="text-blue-500 font-semibold">{selectedAgents.size}</span> Agent{selectedAgents.size > 1 ? 's' : ''} selected
+                  {t('agents.batchSelected', { count: selectedAgents.size })}
                 </span>
               <Divider type="vertical" className="!my-0" />
               <Button size="small" onClick={handleSelectAll}>
-                {selectedAgents.size === filteredAgents.length ? 'Deselect All' : 'Select All'}
+                {selectedAgents.size === filteredAgents.length ? t('agents.deselectAll') : t('agents.selectAll')}
               </Button>
               <Button size="small" icon={<DownloadOutlined />} onClick={handleExport}>
-                Batch Export
+                {t('agents.batchExport')}
               </Button>
               <Button
                 size="small"
@@ -624,11 +641,11 @@ export default function Agents() {
                 icon={<DeleteOutlined />}
                 onClick={() => {
                   Modal.confirm({
-                    title: 'Confirm Delete',
-                    content: `Are you sure you want to delete ${selectedAgents.size} selected Agent${selectedAgents.size > 1 ? 's' : ''}? This cannot be undone.`,
-                    okText: 'Delete',
+                    title: t('agents.batchDeleteTitle'),
+                    content: t('agents.batchDeleteContent', { count: selectedAgents.size }),
+                    okText: t('common.delete'),
                     okType: 'danger',
-                    cancelText: 'Cancel',
+                    cancelText: t('common.cancel'),
                     onOk: () => {
                       selectedAgents.forEach((id) => {
                         deleteMutation.mutate(id);
@@ -638,7 +655,7 @@ export default function Agents() {
                   });
                 }}
               >
-                Batch Delete
+                {t('agents.batchDelete')}
               </Button>
             </Space>
           </Card>
@@ -647,15 +664,15 @@ export default function Agents() {
 
       {/* Create Modal */}
       <Modal
-        title="New Agent"
+        title={t('agents.modalCreateTitle')}
         open={createModalOpen}
         onOk={handleCreate}
         onCancel={() => {
           setCreateModalOpen(false);
           resetForm();
         }}
-        okText="Create"
-        cancelText="Cancel"
+        okText={t('agents.modalCreateOk')}
+        cancelText={t('common.cancel')}
         confirmLoading={createMutation.isPending}
         okButtonProps={{ disabled: !formData.name.trim() }}
         width={640}
@@ -664,26 +681,26 @@ export default function Agents() {
       >
         <Form layout="vertical" className="pt-2">
           <Typography.Text type="secondary" strong className="text-xs uppercase tracking-wide">
-            Basic Info
+            {t('agents.sectionBasic')}
           </Typography.Text>
           <Divider className="!mt-1 !mb-3" />
-          <Form.Item label="Agent Name" required>
+          <Form.Item label={t('agents.agentName')} required>
             <Input
-              placeholder="e.g. Code Review, Documentation, Test Generation"
+              placeholder={t('agents.agentNamePlaceholder')}
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               onPressEnter={handleCreate}
             />
           </Form.Item>
-          <Form.Item label="Description">
+          <Form.Item label={t('agents.description')}>
             <TextArea
               rows={2}
-              placeholder="What does this Agent do?"
+              placeholder={t('agents.descriptionPlaceholder')}
               value={formData.description || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value || null })}
             />
           </Form.Item>
-          <Form.Item label="Display Category" extra="Used for list filtering and tag colors; custom categories can be created via + Add Category">
+          <Form.Item label={t('agents.displayCategory')} extra={t('agents.displayCategoryExtra')}>
             <Select
               value={createFormCategory}
               onChange={(v) => setCreateFormCategory(v)}
@@ -696,13 +713,13 @@ export default function Agents() {
           </Form.Item>
 
           <Typography.Text type="secondary" strong className="text-xs uppercase tracking-wide mt-4 block">
-            Model Config
+            {t('agents.sectionModel')}
           </Typography.Text>
           <Divider className="!mt-1 !mb-3" />
           <div className="grid grid-cols-2 gap-4">
-            <Form.Item label="Model">
+            <Form.Item label={t('agents.model')}>
               <Select
-                placeholder="Select model (defaults to global if empty)"
+                placeholder={t('agents.modelPlaceholder')}
                 value={formData.model || undefined}
                 onChange={(v) => setFormData({ ...formData, model: v || null })}
                 allowClear
@@ -717,13 +734,13 @@ export default function Agents() {
                 className="w-full"
               />
             </Form.Item>
-            <Form.Item label="Temperature">
+            <Form.Item label={t('agents.temperature')}>
               <Input
                 type="number"
                 step="0.1"
                 min="0"
                 max="2"
-                placeholder="0.1 - 1.0"
+                placeholder={t('agents.temperaturePlaceholder')}
                 value={formData.temperature ?? ''}
                 onChange={(e) =>
                   setFormData({
@@ -736,21 +753,21 @@ export default function Agents() {
           </div>
 
           <Typography.Text type="secondary" strong className="text-xs uppercase tracking-wide mt-4 block">
-            System Prompt & Skills
+            {t('agents.sectionPromptSkills')}
           </Typography.Text>
           <Divider className="!mt-1 !mb-3" />
-          <Form.Item label="System Prompt">
+          <Form.Item label={t('agents.systemPrompt')}>
             <TextArea
               rows={4}
-              placeholder="Define the Agent's behavior and personality..."
+              placeholder={t('agents.systemPromptPlaceholder')}
               value={formData.system_prompt || ''}
               onChange={(e) => setFormData({ ...formData, system_prompt: e.target.value || null })}
             />
           </Form.Item>
-          <Form.Item label="Skills">
+          <Form.Item label={t('agents.skills')}>
             <Select
               mode="multiple"
-              placeholder="Select skills"
+              placeholder={t('agents.skillsPlaceholder')}
               value={formData.skills || []}
               onChange={(v) => setFormData({ ...formData, skills: v || [] })}
               options={
@@ -776,12 +793,12 @@ export default function Agents() {
             />
           </Form.Item>
           <Form.Item
-            label="ZeroMQ Topics"
-            extra="The Agent subscribes to these topics for inter-Agent communication"
+            label={t('agents.topics')}
+            extra={t('agents.topicsExtra')}
           >
             <Select
               mode="tags"
-              placeholder="Add topics (press Enter)"
+              placeholder={t('agents.topicsPlaceholder')}
               value={formData.topics || []}
               onChange={(v) => setFormData({ ...formData, topics: v || [] })}
               tokenSeparators={[',']}
@@ -793,7 +810,7 @@ export default function Agents() {
 
       {/* Edit Modal */}
       <Modal
-        title={`Edit Agent: ${selectedAgent?.name ?? ''}`}
+        title={t('agents.modalEditTitle', { name: selectedAgent?.name ?? '' })}
         open={editModalOpen}
         onOk={handleUpdate}
         onCancel={() => {
@@ -801,8 +818,8 @@ export default function Agents() {
           setSelectedAgent(null);
           resetForm();
         }}
-        okText="Save"
-        cancelText="Cancel"
+        okText={t('common.save')}
+        cancelText={t('common.cancel')}
         confirmLoading={updateMutation.isPending}
         okButtonProps={{ disabled: !formData.name.trim() }}
         width={640}
@@ -811,24 +828,24 @@ export default function Agents() {
       >
         <Form layout="vertical" className="pt-2">
           <Typography.Text type="secondary" strong className="text-xs uppercase tracking-wide">
-            Basic Info
+            {t('agents.sectionBasic')}
           </Typography.Text>
           <Divider className="!mt-1 !mb-3" />
-          <Form.Item label="Agent Name" required>
+          <Form.Item label={t('agents.agentName')} required>
             <Input
-              placeholder="e.g. Code Review, Documentation"
+              placeholder={t('agents.agentNamePlaceholderShort')}
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             />
           </Form.Item>
-          <Form.Item label="Description">
+          <Form.Item label={t('agents.description')}>
             <TextArea
               rows={2}
               value={formData.description || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value || null })}
             />
           </Form.Item>
-          <Form.Item label="Display Category" extra="Used for list filtering and tag colors">
+          <Form.Item label={t('agents.displayCategory')} extra={t('agents.displayCategoryExtraEdit')}>
             <Select
               value={editFormCategory}
               onChange={(v) => setEditFormCategory(v)}
@@ -841,13 +858,13 @@ export default function Agents() {
           </Form.Item>
 
           <Typography.Text type="secondary" strong className="text-xs uppercase tracking-wide mt-4 block">
-            Model Config
+            {t('agents.sectionModel')}
           </Typography.Text>
           <Divider className="!mt-1 !mb-3" />
           <div className="grid grid-cols-2 gap-4">
-            <Form.Item label="Model">
+            <Form.Item label={t('agents.model')}>
               <Select
-                placeholder="Select model (defaults to global if empty)"
+                placeholder={t('agents.modelPlaceholder')}
                 value={formData.model || undefined}
                 onChange={(v) => setFormData({ ...formData, model: v || null })}
                 allowClear
@@ -862,13 +879,13 @@ export default function Agents() {
                 className="w-full"
               />
             </Form.Item>
-            <Form.Item label="Temperature">
+            <Form.Item label={t('agents.temperature')}>
               <Input
                 type="number"
                 step="0.1"
                 min="0"
                 max="2"
-                placeholder="0.1 - 1.0"
+                placeholder={t('agents.temperaturePlaceholder')}
                 value={formData.temperature ?? ''}
                 onChange={(e) =>
                   setFormData({
@@ -881,20 +898,20 @@ export default function Agents() {
           </div>
 
           <Typography.Text type="secondary" strong className="text-xs uppercase tracking-wide mt-4 block">
-            System Prompt & Skills
+            {t('agents.sectionPromptSkills')}
           </Typography.Text>
           <Divider className="!mt-1 !mb-3" />
-          <Form.Item label="System Prompt">
+          <Form.Item label={t('agents.systemPrompt')}>
             <TextArea
               rows={4}
               value={formData.system_prompt || ''}
               onChange={(e) => setFormData({ ...formData, system_prompt: e.target.value || null })}
             />
           </Form.Item>
-          <Form.Item label="Skills">
+          <Form.Item label={t('agents.skills')}>
             <Select
               mode="multiple"
-              placeholder="Select skills"
+              placeholder={t('agents.skillsPlaceholder')}
               value={formData.skills || []}
               onChange={(v) => setFormData({ ...formData, skills: v || [] })}
               options={
@@ -920,12 +937,12 @@ export default function Agents() {
             />
           </Form.Item>
           <Form.Item
-            label="ZeroMQ Topics"
-            extra="The Agent subscribes to these topics for inter-Agent communication"
+            label={t('agents.topics')}
+            extra={t('agents.topicsExtra')}
           >
             <Select
               mode="tags"
-              placeholder="Add topics (press Enter)"
+              placeholder={t('agents.topicsPlaceholder')}
               value={formData.topics || []}
               onChange={(v) => setFormData({ ...formData, topics: v || [] })}
               tokenSeparators={[',']}
@@ -934,10 +951,10 @@ export default function Agents() {
           </Form.Item>
 
           <Typography.Text type="secondary" strong className="text-xs uppercase tracking-wide mt-4 block">
-            Status
+            {t('agents.sectionStatus')}
           </Typography.Text>
           <Divider className="!mt-1 !mb-3" />
-          <Form.Item label="Enabled">
+          <Form.Item label={t('common.enabled')}>
             <Switch
               checked={formData.enabled}
               onChange={(checked) => setFormData({ ...formData, enabled: checked })}
@@ -947,22 +964,22 @@ export default function Agents() {
       </Modal>
 
       <Modal
-        title="Add Category"
+        title={t('agents.modalAddCategoryTitle')}
         open={addCategoryModalOpen}
         onOk={handleConfirmAddCategory}
         onCancel={() => {
           setAddCategoryModalOpen(false);
           setNewCategoryName('');
         }}
-        okText="Add"
-        cancelText="Cancel"
+        okText={t('agents.add')}
+        cancelText={t('common.cancel')}
         destroyOnHidden
       >
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-          New categories appear in the filter tabs. Assign an Agent to a category via the Display Category field when creating or editing.
+          {t('agents.modalAddCategoryHint')}
         </p>
         <Input
-          placeholder="Category name"
+          placeholder={t('agents.categoryNamePlaceholder')}
           value={newCategoryName}
           onChange={(e) => setNewCategoryName(e.target.value)}
           onPressEnter={handleConfirmAddCategory}
@@ -973,7 +990,7 @@ export default function Agents() {
 
       {/* Import Modal */}
       <Modal
-        title="Import Agent"
+        title={t('agents.modalImportTitle')}
         open={importModalOpen}
         onCancel={() => setImportModalOpen(false)}
         footer={null}
@@ -991,8 +1008,8 @@ export default function Agents() {
             <p className="ant-upload-drag-icon">
               <UploadOutlined className="text-4xl text-gray-400" />
             </p>
-            <p className="ant-upload-text">Click or drag a file to upload</p>
-            <p className="ant-upload-hint">Supports JSON-formatted Agent configuration files</p>
+            <p className="ant-upload-text">{t('agents.importUploadText')}</p>
+            <p className="ant-upload-hint">{t('agents.importUploadHint')}</p>
           </Upload.Dragger>
         </div>
       </Modal>

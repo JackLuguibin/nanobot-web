@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Form,
@@ -16,17 +16,13 @@ import {
 } from 'antd';
 import { ReadOutlined, EditOutlined, DeleteOutlined, PlusOutlined, EyeOutlined } from '@ant-design/icons';
 import { Markdown } from '../components/Markdown';
+import { useTranslation } from 'react-i18next';
 import * as api from '../api/client';
 import { useAppStore } from '../store';
 
 const { Text } = Typography;
 
 type SkillTabKey = 'builtin' | 'workspace';
-
-const SKILL_TABS: { key: SkillTabKey; label: string }[] = [
-  { key: 'builtin', label: 'Built-in Skills' },
-  { key: 'workspace', label: 'Workspace Skills' },
-];
 
 type RegistrySkill = { name: string; description?: string; url?: string; version?: string };
 
@@ -49,6 +45,7 @@ function buildSkillContent(name: string, description: string, body: string): str
 }
 
 export default function Skills() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { addToast, currentBotId, setCurrentBotId } = useAppStore();
   const [activeTab, setActiveTab] = useState<SkillTabKey>('builtin');
@@ -65,6 +62,15 @@ export default function Skills() {
   const [skillCreateForm] = Form.useForm<{ name: string; description: string; content: string }>();
   const [registryUrl, setRegistryUrl] = useState('');
   const [registrySearch, setRegistrySearch] = useState('');
+
+  const skillTabs = useMemo(
+    () =>
+      [
+        { key: 'builtin' as const, label: t('skills.tabBuiltin') },
+        { key: 'workspace' as const, label: t('skills.tabWorkspace') },
+      ] satisfies { key: SkillTabKey; label: string }[],
+    [t],
+  );
 
   const { data: bots } = useQuery({
     queryKey: ['bots'],
@@ -86,7 +92,7 @@ export default function Skills() {
     mutationFn: (name: string) =>
       api.installSkillFromRegistry(name, currentBotId, registryUrl || undefined),
     onSuccess: () => {
-      addToast({ type: 'success', message: 'Skill installed from registry' });
+      addToast({ type: 'success', message: t('skills.installed') });
       queryClient.invalidateQueries({ queryKey: ['skills'] });
     },
     onError: (e) => addToast({ type: 'error', message: String(e) }),
@@ -96,7 +102,7 @@ export default function Skills() {
     mutationFn: ({ section, data }: { section: string; data: Record<string, unknown> }) =>
       api.updateConfig(section, data, currentBotId),
     onSuccess: () => {
-      addToast({ type: 'success', message: 'Settings saved successfully' });
+      addToast({ type: 'success', message: t('settings.saved') });
       queryClient.invalidateQueries({ queryKey: ['config'] });
       queryClient.invalidateQueries({ queryKey: ['skills'] });
     },
@@ -109,7 +115,7 @@ export default function Skills() {
     mutationFn: ({ name, content }: { name: string; content: string }) =>
       api.updateSkillContent(name, content, currentBotId),
     onSuccess: () => {
-      addToast({ type: 'success', message: 'Skill updated' });
+      addToast({ type: 'success', message: t('skills.updated') });
       setSkillEditModal(null);
       queryClient.invalidateQueries({ queryKey: ['skills'] });
     },
@@ -122,7 +128,7 @@ export default function Skills() {
     mutationFn: (data: { name: string; description: string; content: string }) =>
       api.createSkill(data, currentBotId),
     onSuccess: () => {
-      addToast({ type: 'success', message: 'Skill created' });
+      addToast({ type: 'success', message: t('skills.created') });
       setSkillCreateModal(false);
       skillCreateForm.resetFields();
       queryClient.invalidateQueries({ queryKey: ['skills'] });
@@ -135,7 +141,7 @@ export default function Skills() {
   const deleteSkillMutation = useMutation({
     mutationFn: (name: string) => api.deleteSkill(name, currentBotId),
     onSuccess: () => {
-      addToast({ type: 'success', message: 'Skill deleted' });
+      addToast({ type: 'success', message: t('skills.deleted') });
       queryClient.invalidateQueries({ queryKey: ['skills'] });
     },
     onError: (error) => {
@@ -146,7 +152,7 @@ export default function Skills() {
   const copyToWorkspaceMutation = useMutation({
     mutationFn: (name: string) => api.copySkillToWorkspace(name, currentBotId),
     onSuccess: () => {
-      addToast({ type: 'success', message: 'Skill copied to workspace' });
+      addToast({ type: 'success', message: t('skills.copied') });
       queryClient.invalidateQueries({ queryKey: ['skills'] });
     },
     onError: (error) => {
@@ -198,15 +204,15 @@ export default function Skills() {
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">{skill.name}</p>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1 hidden sm:block">
-            {skill.description || 'No description'}
+            {skill.description || t('skills.noDescription')}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <Tag color={source === 'builtin' ? 'blue' : 'green'} className="!m-0">
-            {source}
+            {source === 'builtin' ? t('skills.sourceBuiltin') : t('skills.sourceWorkspace')}
           </Tag>
           {skill.available === false && (
-            <Tag color="warning" className="!m-0">unavailable</Tag>
+            <Tag color="warning" className="!m-0">{t('skills.unavailable')}</Tag>
           )}
         </div>
       </div>
@@ -219,10 +225,10 @@ export default function Skills() {
       <div className="flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 via-primary-700 to-gray-700 dark:from-white dark:via-primary-300 dark:to-gray-300 bg-clip-text text-transparent">
-            Skills
+            {t('skills.title')}
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">
-            Manage built-in and workspace skills
+            {t('skills.subtitle')}
           </p>
         </div>
         <Space>
@@ -240,7 +246,7 @@ export default function Skills() {
             onClick={() => setSkillCreateModal(true)}
             className="shadow-md shadow-primary-500/25"
           >
-            <span className="hidden sm:inline">Add Skill</span>
+            <span className="hidden sm:inline">{t('skills.addSkill')}</span>
           </Button>
         </Space>
       </div>
@@ -248,21 +254,21 @@ export default function Skills() {
       {/* Registry Install Section */}
       <div className="mt-6 p-5 rounded-2xl border border-gray-200/80 dark:border-gray-700/60 bg-white dark:bg-gray-800/40 shadow-sm">
         <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
-          Install from Registry
+          {t('skills.registryTitle')}
         </h3>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Registry URL (JSON format). Load skills and install with one click.
+          {t('skills.registryDescription')}
         </p>
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
             <Input
-              placeholder="Registry URL e.g. https://example.com/registry.json"
+              placeholder={t('skills.registryUrlPlaceholder')}
               value={registryUrl}
               onChange={(e) => setRegistryUrl(e.target.value)}
               className="flex-1 min-w-[200px] border-gray-300 dark:border-gray-600 hover:border-primary-400 focus:border-primary-500"
             />
             <Input
-              placeholder="Search skill name or description"
+              placeholder={t('skills.registrySearchPlaceholder')}
               value={registrySearch}
               onChange={(e) => setRegistrySearch(e.target.value)}
               className="w-64"
@@ -274,12 +280,14 @@ export default function Skills() {
               loading={registryLoading}
               className="border-gray-300 dark:border-gray-600 hover:border-primary-400 hover:text-primary-500 shrink-0"
             >
-              Search
+              {t('skills.search')}
             </Button>
           </div>
           {registryUrl.trim() && (
             registrySkills.length === 0 ? (
-              <Empty description={registryLoading ? 'Loading...' : 'No skills found or registry empty'} />
+              <Empty
+                description={registryLoading ? t('common.loading') : t('skills.registryEmpty')}
+              />
             ) : (
               <div className="space-y-3">
                 {registrySkills.map((s: RegistrySkill) => {
@@ -303,7 +311,7 @@ export default function Skills() {
                         onClick={() => installFromRegistryMutation.mutate(s.name)}
                         className="!rounded-lg"
                       >
-                        {installed ? 'Installed' : 'Install'}
+                        {installed ? t('skills.installedLabel') : t('skills.install')}
                       </Button>
                     </div>
                   );
@@ -319,19 +327,19 @@ export default function Skills() {
           <Spin size="large" />
         </div>
       ) : !skills || skills.length === 0 ? (
-        <Empty description="No skills found" className="shrink-0" />
+        <Empty description={t('skills.noSkills')} className="shrink-0" />
       ) : (
         <>
           <Alert
             className="shrink-0 mt-6 rounded-xl border-0"
-            title="Changes require restart"
-            description="Skill enable/disable or content changes take effect after restarting the bot."
+            title={t('skills.restartTitle')}
+            description={t('skills.restartDescription')}
             type="info"
             showIcon
           />
           {/* Tabs with underline indicator */}
           <div className="flex border-b border-gray-200 dark:border-gray-700 mt-6 mb-4 gap-0">
-            {SKILL_TABS.map(({ key, label }) => (
+            {skillTabs.map(({ key, label }) => (
               <button
                 key={key}
                 onClick={() => setActiveTab(key)}
@@ -355,10 +363,10 @@ export default function Skills() {
             {activeTab === 'builtin' ? (
               <div className="space-y-4">
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  Enable or disable built-in skills
+                  {t('skills.builtinHint')}
                 </p>
                 {skills.filter((s) => s.source === 'builtin').length === 0 ? (
-                  <Empty description="No built-in skills" />
+                  <Empty description={t('skills.emptyBuiltin')} />
                 ) : (
                   <div className="space-y-3">
                     {skills
@@ -373,7 +381,7 @@ export default function Skills() {
                             loading={copyToWorkspaceMutation.isPending}
                             className="text-gray-600 dark:text-gray-400 hover:text-primary-500"
                           >
-                            Edit
+                            {t('skills.edit')}
                           </Button>
                           <Button
                             type="text"
@@ -386,7 +394,7 @@ export default function Skills() {
                             }}
                             className="text-gray-600 dark:text-gray-400 hover:text-primary-500"
                           >
-                            View
+                            {t('skills.view')}
                           </Button>
                           <Switch
                             checked={skill.enabled}
@@ -405,10 +413,10 @@ export default function Skills() {
             ) : (
               <div className="space-y-4">
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  Edit or delete workspace skills
+                  {t('skills.workspaceHint')}
                 </p>
                 {skills.filter((s) => s.source === 'workspace').length === 0 ? (
-                  <Empty description="No workspace skills" />
+                  <Empty description={t('skills.emptyWorkspace')} />
                 ) : (
                   <div className="space-y-3">
                     {skills
@@ -432,7 +440,7 @@ export default function Skills() {
                             }}
                             className="text-gray-600 dark:text-gray-400 hover:text-primary-500"
                           >
-                            Edit
+                            {t('skills.edit')}
                           </Button>
                           <Button
                             type="text"
@@ -441,16 +449,17 @@ export default function Skills() {
                             icon={<DeleteOutlined />}
                             onClick={() => {
                               Modal.confirm({
-                                title: `Delete skill "${skill.name}"?`,
-                                content: 'This cannot be undone.',
-                                okText: 'Delete',
+                                title: t('skills.deleteConfirmTitle', { name: skill.name }),
+                                content: t('skills.deleteConfirmContent'),
+                                okText: t('common.delete'),
+                                cancelText: t('common.cancel'),
                                 okType: 'danger',
                                 onOk: () => deleteSkillMutation.mutate(skill.name),
                               });
                             }}
                             className="hover:!text-red-500"
                           >
-                            Delete
+                            {t('skills.delete')}
                           </Button>
                         </SkillItemCard>
                       ))}
@@ -463,7 +472,9 @@ export default function Skills() {
       )}
 
       <Modal
-        title={`View skill: ${skillViewModal?.name}`}
+        title={
+          skillViewModal ? t('skills.viewTitle', { name: skillViewModal.name }) : ''
+        }
         open={!!skillViewModal}
         onCancel={() => setSkillViewModal(null)}
         footer={
@@ -474,17 +485,17 @@ export default function Skills() {
                 onClick={() => setSkillViewMode('preview')}
                 className={`px-3 py-1 rounded text-sm ${skillViewMode === 'preview' ? 'bg-primary-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}
               >
-                Preview
+                {t('skills.preview')}
               </button>
               <button
                 type="button"
                 onClick={() => setSkillViewMode('raw')}
                 className={`px-3 py-1 rounded text-sm ${skillViewMode === 'raw' ? 'bg-primary-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}
               >
-                Raw
+                {t('skills.raw')}
               </button>
             </div>
-            <Button onClick={() => setSkillViewModal(null)}>Close</Button>
+            <Button onClick={() => setSkillViewModal(null)}>{t('skills.close')}</Button>
           </div>
         }
         width={700}
@@ -506,7 +517,9 @@ export default function Skills() {
       </Modal>
 
       <Modal
-        title={`Edit skill: ${skillEditModal?.name}`}
+        title={
+          skillEditModal ? t('skills.editTitle', { name: skillEditModal.name }) : ''
+        }
         open={!!skillEditModal}
         onCancel={() => setSkillEditModal(null)}
         footer={null}
@@ -533,21 +546,33 @@ export default function Skills() {
               });
             }}
           >
-            <Form.Item name="description" label="Description" rules={[{ required: true }]}>
-              <Input placeholder="Brief description of the skill" />
+            <Form.Item
+              name="description"
+              label={t('skills.fieldDescription')}
+              rules={[{ required: true }]}
+            >
+              <Input placeholder={t('skills.descriptionPlaceholder')} />
             </Form.Item>
-            <Form.Item name="body" label="Content (SKILL.md body)" rules={[{ required: true }]}>
-              <Input.TextArea rows={14} className="font-mono text-sm" placeholder="# Skill instructions..." />
+            <Form.Item
+              name="body"
+              label={t('skills.fieldContentBody')}
+              rules={[{ required: true }]}
+            >
+              <Input.TextArea
+                rows={14}
+                className="font-mono text-sm"
+                placeholder={t('skills.contentPlaceholder')}
+              />
             </Form.Item>
             <Form.Item className="!mb-0">
               <Space>
-                <Button onClick={() => setSkillEditModal(null)}>Cancel</Button>
+                <Button onClick={() => setSkillEditModal(null)}>{t('common.cancel')}</Button>
                 <Button
                   type="primary"
                   htmlType="submit"
                   loading={updateSkillContentMutation.isPending}
                 >
-                  Save
+                  {t('common.save')}
                 </Button>
               </Space>
             </Form.Item>
@@ -556,7 +581,7 @@ export default function Skills() {
       </Modal>
 
       <Modal
-        title="Create Workspace Skill"
+        title={t('skills.createWorkspaceTitle')}
         open={skillCreateModal}
         onCancel={() => {
           setSkillCreateModal(false);
@@ -578,22 +603,26 @@ export default function Skills() {
         >
           <Form.Item
             name="name"
-            label="Name"
+            label={t('skills.fieldName')}
             rules={[
               { required: true },
               {
                 pattern: /^[a-zA-Z0-9_-]+$/,
-                message: 'Only letters, numbers, underscore, hyphen',
+                message: t('skills.nameRule'),
               },
             ]}
           >
-            <Input placeholder="my-skill" />
+            <Input placeholder={t('skills.namePlaceholder')} />
           </Form.Item>
-          <Form.Item name="description" label="Description" rules={[{ required: true }]}>
-            <Input placeholder="Brief description of the skill" />
+          <Form.Item
+            name="description"
+            label={t('skills.fieldDescription')}
+            rules={[{ required: true }]}
+          >
+            <Input placeholder={t('skills.descriptionPlaceholder')} />
           </Form.Item>
-          <Form.Item name="content" label="Content (SKILL.md body)">
-            <Input.TextArea rows={8} placeholder="# Skill instructions..." />
+          <Form.Item name="content" label={t('skills.fieldContentBody')}>
+            <Input.TextArea rows={8} placeholder={t('skills.contentPlaceholder')} />
           </Form.Item>
           <Form.Item className="!mb-0">
             <Space>
@@ -603,14 +632,14 @@ export default function Skills() {
                   skillCreateForm.resetFields();
                 }}
               >
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button
                 type="primary"
                 htmlType="submit"
                 loading={createSkillMutation.isPending}
               >
-                Create
+                {t('skills.create')}
               </Button>
             </Space>
           </Form.Item>

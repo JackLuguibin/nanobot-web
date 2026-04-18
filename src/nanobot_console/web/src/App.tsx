@@ -1,6 +1,9 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider, theme as antdTheme, App as AntdApp, Spin } from 'antd';
+import enUS from 'antd/locale/en_US';
+import zhCN from 'antd/locale/zh_CN';
 import { lazy, Suspense, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from './store';
 import Layout from './components/Layout';
 import ToastBridge from './components/ToastBridge';
@@ -28,9 +31,11 @@ function resolveIsDark(theme: 'light' | 'dark' | 'system'): boolean {
 }
 
 function PageLoading() {
+  const { t } = useTranslation();
   return (
-    <div className="flex min-h-[50vh] w-full items-center justify-center">
+    <div className="flex min-h-[50vh] w-full flex-col items-center justify-center gap-3">
       <Spin size="large" />
+      <span className="text-sm text-gray-500 dark:text-gray-400">{t('app.pageLoading')}</span>
     </div>
   );
 }
@@ -68,7 +73,9 @@ function AppRoutes() {
 
 function App() {
   const { theme } = useAppStore();
+  const { i18n } = useTranslation();
   const [isDark, setIsDark] = useState(() => resolveIsDark(theme));
+  const antdLocale = i18n.language.startsWith('zh') ? zhCN : enUS;
 
   useEffect(() => {
     setIsDark(resolveIsDark(theme));
@@ -82,6 +89,7 @@ function App() {
 
   return (
     <ConfigProvider
+      locale={antdLocale}
       theme={{
         algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
         token: {

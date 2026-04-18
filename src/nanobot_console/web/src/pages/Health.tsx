@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import {
   Card,
   Tag,
@@ -22,6 +23,7 @@ function IssueIcon({ severity }: { severity: string }) {
 }
 
 export default function Health() {
+  const { t } = useTranslation();
   const { currentBotId } = useAppStore();
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -42,7 +44,7 @@ export default function Health() {
   if (error) {
     return (
       <div className="p-6">
-        <Alert type="error" message="加载失败" description={String(error)} showIcon />
+        <Alert type="error" message={t('health.loadFailed')} description={String(error)} showIcon />
       </div>
     );
   }
@@ -55,10 +57,10 @@ export default function Health() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-            健康检查
+            {t('health.title')}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            检查 Bootstrap 文件、MCP 配置、通道等
+            {t('health.subtitle')}
           </p>
         </div>
         <Button icon={<ReloadOutlined />} onClick={() => refetch()} />
@@ -68,7 +70,7 @@ export default function Health() {
         <Card>
           <Empty
             image={<CheckCircleOutlined style={{ fontSize: 64, color: '#22c55e' }} />}
-            description="未发现任何问题"
+            description={t('health.allGood')}
             className="py-12"
           />
         </Card>
@@ -77,19 +79,21 @@ export default function Health() {
           <Card size="small">
             <div className="flex items-center gap-4">
               {criticalCount > 0 && (
-                <Tag color="red">严重 {criticalCount}</Tag>
+                <Tag color="red">{t('health.tagCritical', { count: criticalCount })}</Tag>
               )}
               {warningCount > 0 && (
-                <Tag color="orange">警告 {warningCount}</Tag>
+                <Tag color="orange">{t('health.tagWarning', { count: warningCount })}</Tag>
               )}
               {issues.length - criticalCount - warningCount > 0 && (
-                <Tag color="blue">提示 {issues.length - criticalCount - warningCount}</Tag>
+                <Tag color="blue">
+                  {t('health.tagInfo', { count: issues.length - criticalCount - warningCount })}
+                </Tag>
               )}
             </div>
           </Card>
 
           <Card
-            title="检查结果"
+            title={t('health.resultTitle')}
             size="small"
           >
             <div className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -113,7 +117,11 @@ export default function Health() {
                         : 'blue'
                     }
                   >
-                    {issue.severity === 'critical' ? '严重' : issue.severity === 'warning' ? '警告' : '提示'}
+                    {issue.severity === 'critical'
+                      ? t('health.severityCritical')
+                      : issue.severity === 'warning'
+                        ? t('health.severityWarning')
+                        : t('health.severityInfo')}
                   </Tag>
                 </div>
               ))}

@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import {
   Table,
   Select,
@@ -27,6 +28,7 @@ import type { ToolCallLog } from '../api/types';
 const { Text } = Typography;
 
 export default function Logs() {
+  const { t } = useTranslation();
   const { addToast, currentBotId } = useAppStore();
   const [toolFilter, setToolFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -90,7 +92,7 @@ export default function Logs() {
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
     } catch {
-      addToast({ type: 'error', message: 'Failed to copy' });
+      addToast({ type: 'error', message: t('logs.copyFailed') });
     }
   };
 
@@ -107,7 +109,7 @@ export default function Logs() {
 
   const columns: ColumnsType<ToolCallLog> = [
     {
-      title: 'Status',
+      title: t('logs.colStatus'),
       key: 'status',
       width: 100,
       render: (_, log) => (
@@ -115,7 +117,7 @@ export default function Logs() {
       ),
     },
     {
-      title: 'Tool',
+      title: t('logs.colTool'),
       dataIndex: 'tool_name',
       key: 'tool_name',
       render: (name: string) => (
@@ -126,7 +128,7 @@ export default function Logs() {
       ),
     },
     {
-      title: 'Arguments',
+      title: t('logs.colArguments'),
       key: 'arguments',
       render: (_, log) => {
         const argStr = JSON.stringify(log.arguments);
@@ -143,7 +145,7 @@ export default function Logs() {
       },
     },
     {
-      title: 'Time',
+      title: t('logs.colTime'),
       dataIndex: 'timestamp',
       key: 'timestamp',
       width: 110,
@@ -154,7 +156,7 @@ export default function Logs() {
       ),
     },
     {
-      title: 'Duration',
+      title: t('logs.colDuration'),
       dataIndex: 'duration_ms',
       key: 'duration_ms',
       width: 100,
@@ -172,7 +174,7 @@ export default function Logs() {
       <div>
         <div className="flex items-center justify-between mb-2">
           <Text type="secondary" className="text-xs font-medium">
-            Arguments
+            {t('logs.arguments')}
           </Text>
           <Button
             size="small"
@@ -198,7 +200,7 @@ export default function Logs() {
         <div>
           <div className="flex items-center justify-between mb-2">
             <Text type="secondary" className="text-xs font-medium">
-              Result
+              {t('logs.result')}
             </Text>
             <Button
               size="small"
@@ -227,12 +229,12 @@ export default function Logs() {
       <div className="flex shrink-0 items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-            Tool Logs
+            {t('logs.title')}
           </h1>
-          <p className="text-sm text-gray-500 mt-1">View tool execution history</p>
+          <p className="text-sm text-gray-500 mt-1">{t('logs.subtitle')}</p>
         </div>
         <Button icon={<ReloadOutlined />} onClick={() => refetch()}>
-          Refresh
+          {t('common.refresh')}
         </Button>
       </div>
 
@@ -240,11 +242,11 @@ export default function Logs() {
       {filteredLogs && filteredLogs.length > 0 && (
         <div className="grid shrink-0 grid-cols-3 gap-4">
           <Card size="small">
-            <Statistic title="Total Calls" value={filteredLogs.length} />
+            <Statistic title={t('logs.totalCalls')} value={filteredLogs.length} />
           </Card>
           <Card size="small">
             <Statistic
-              title="Success Rate"
+              title={t('logs.successRate')}
               value={
                 filteredLogs.length > 0
                   ? Math.round((successCount / filteredLogs.length) * 100)
@@ -255,7 +257,7 @@ export default function Logs() {
             />
           </Card>
           <Card size="small">
-            <Statistic title="Avg Duration" value={formatDuration(avgDuration)} />
+            <Statistic title={t('logs.avgDuration')} value={formatDuration(avgDuration)} />
           </Card>
         </div>
       )}
@@ -263,7 +265,7 @@ export default function Logs() {
       {/* Filters */}
       <Space wrap className="shrink-0">
         <Input.Search
-          placeholder="Search logs..."
+          placeholder={t('logs.searchPlaceholder')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onSearch={setSearchQuery}
@@ -273,7 +275,7 @@ export default function Logs() {
 
         <Select
           value={toolFilter || undefined}
-          placeholder="All Tools"
+          placeholder={t('logs.allTools')}
           allowClear
           onChange={(val) => setToolFilter(val || '')}
           style={{ width: 180 }}
@@ -287,12 +289,12 @@ export default function Logs() {
           value={statusFilter || 'all'}
           onChange={(val) => setStatusFilter(val === 'all' ? '' : String(val))}
           options={[
-            { value: 'all', label: 'All' },
+            { value: 'all', label: t('logs.segAll') },
             {
               value: 'success',
               label: (
                 <span className="text-green-600">
-                  Success ({successCount})
+                  {t('logs.segSuccess', { count: successCount })}
                 </span>
               ),
             },
@@ -300,7 +302,7 @@ export default function Logs() {
               value: 'error',
               label: (
                 <span className="text-red-600">
-                  Error ({errorCount})
+                  {t('logs.segError', { count: errorCount })}
                 </span>
               ),
             },
@@ -312,10 +314,10 @@ export default function Logs() {
           onChange={setLimit}
           style={{ width: 120 }}
           options={[
-            { value: 50, label: 'Last 50' },
-            { value: 100, label: 'Last 100' },
-            { value: 200, label: 'Last 200' },
-            { value: 500, label: 'Last 500' },
+            { value: 50, label: t('logs.lastN', { count: 50 }) },
+            { value: 100, label: t('logs.lastN', { count: 100 }) },
+            { value: 200, label: t('logs.lastN', { count: 200 }) },
+            { value: 500, label: t('logs.lastN', { count: 500 }) },
           ]}
         />
       </Space>
@@ -338,11 +340,11 @@ export default function Logs() {
           }}
           locale={{
             emptyText: error ? (
-              <div className="text-red-500">Error loading logs: {String(error)}</div>
+              <div className="text-red-500">{t('logs.loadError', { error: String(error) })}</div>
             ) : (
               <Space direction="vertical" className="py-6">
                 <CodeOutlined className="text-4xl text-gray-300" />
-                <span>No tool logs found</span>
+                <span>{t('logs.empty')}</span>
                 {(toolFilter || statusFilter || searchQuery) && (
                   <Button
                     type="link"
@@ -353,7 +355,7 @@ export default function Logs() {
                       setSearchQuery('');
                     }}
                   >
-                    Clear filters
+                    {t('logs.clearFilters')}
                   </Button>
                 )}
               </Space>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 
 import type { StreamChunk } from "../api/types";
 import { useAppStore } from "../store";
+import i18n from "../i18n";
 import {
   mergeToolCallsWithResults,
   normalizeToolCallsArray,
@@ -539,8 +540,7 @@ export function useNanobotChannelWebSocket(options: {
           if (replacedByPeer) {
             useAppStore.getState().addToast({
               type: "warning",
-              message:
-                "此 chat_id 已在其他标签页或窗口连接；本页连接已关闭且不会自动重连，请刷新或关闭重复页面。",
+              message: i18n.t("chat.nanobotWsDuplicateTab"),
             });
             return;
           }

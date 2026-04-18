@@ -1,6 +1,7 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, Button, Badge, Segmented, Select } from 'antd';
+import { useTranslation } from 'react-i18next';
 import type { MenuProps } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../store';
@@ -48,43 +49,8 @@ type NavSection = {
   items: NavItem[];
 };
 
-const navSections: NavSection[] = [
-  {
-    title: 'Chat',
-    items: [
-      { path: '/dashboard', label: 'Overview', icon: LayoutDashboard },
-      { path: '/chat', label: 'Chat', icon: MessageSquare },
-    ],
-  },
-  {
-    title: 'Control',
-    items: [
-      { path: '/channels', label: 'Channels', icon: Smartphone },
-      { path: '/sessions', label: 'Sessions', icon: FolderOpen },
-      { path: '/cron', label: 'Cron', icon: Clock },
-      { path: '/health', label: 'Health', icon: Heart },
-      { path: '/activity', label: 'Activity', icon: Activity },
-    ],
-  },
-  {
-    title: 'Agent',
-    items: [
-      { path: '/mcp', label: 'MCP', icon: Plug },
-      { path: '/memory', label: 'Memory', icon: Brain },
-      { path: '/workspace', label: 'Workspace', icon: FolderOpen },
-      { path: '/agents', label: 'Agents', icon: Users },
-      { path: '/bot-profile', label: 'Profile', icon: UserCircle },
-      { path: '/logs', label: 'Logs', icon: FileText },
-      { path: '/skills', label: 'Skills', icon: BookOpen },
-    ],
-  },
-  {
-    title: 'Management',
-    items: [{ path: '/settings', label: 'Settings', icon: Settings }],
-  },
-];
-
 export default function Layout({ children }: LayoutProps) {
+  const { t, i18n } = useTranslation();
   const location = useLocation();
   const {
     sidebarCollapsed,
@@ -100,17 +66,56 @@ export default function Layout({ children }: LayoutProps) {
   } = useAppStore();
   const consolePushConfigured = isConsoleWebSocketConfigured();
 
+  const navSections: NavSection[] = useMemo(
+    () => [
+      {
+        title: t('layout.sectionChat'),
+        items: [
+          { path: '/dashboard', label: t('layout.navOverview'), icon: LayoutDashboard },
+          { path: '/chat', label: t('layout.navChat'), icon: MessageSquare },
+        ],
+      },
+      {
+        title: t('layout.sectionControl'),
+        items: [
+          { path: '/channels', label: t('layout.navChannels'), icon: Smartphone },
+          { path: '/sessions', label: t('layout.navSessions'), icon: FolderOpen },
+          { path: '/cron', label: t('layout.navCron'), icon: Clock },
+          { path: '/health', label: t('layout.navHealth'), icon: Heart },
+          { path: '/activity', label: t('layout.navActivity'), icon: Activity },
+        ],
+      },
+      {
+        title: t('layout.sectionAgent'),
+        items: [
+          { path: '/mcp', label: t('layout.navMcp'), icon: Plug },
+          { path: '/memory', label: t('layout.navMemory'), icon: Brain },
+          { path: '/workspace', label: t('layout.navWorkspace'), icon: FolderOpen },
+          { path: '/agents', label: t('layout.navAgents'), icon: Users },
+          { path: '/bot-profile', label: t('layout.navProfile'), icon: UserCircle },
+          { path: '/logs', label: t('layout.navLogs'), icon: FileText },
+          { path: '/skills', label: t('layout.navSkills'), icon: BookOpen },
+        ],
+      },
+      {
+        title: t('layout.sectionManagement'),
+        items: [{ path: '/settings', label: t('layout.navSettings'), icon: Settings }],
+      },
+    ],
+    [t],
+  );
+
   const wsStatusLabel = consolePushConfigured
     ? wsConnected
-      ? 'Connected'
+      ? t('layout.wsConnected')
       : wsConnecting
-        ? 'Connecting…'
-        : 'Disconnected'
+        ? t('layout.wsConnecting')
+        : t('layout.wsDisconnected')
     : agentWsLinked
       ? agentWsReady
-        ? 'Agent connected'
-        : 'Agent connecting…'
-      : 'Live push off';
+        ? t('layout.wsAgentReady')
+        : t('layout.wsAgentConnecting')
+      : t('layout.wsLivePushOff');
 
   const wsBadgeStatus = consolePushConfigured
     ? wsConnected
@@ -126,15 +131,15 @@ export default function Layout({ children }: LayoutProps) {
 
   const wsStatusTitle = consolePushConfigured
     ? wsConnected
-      ? 'WebSocket connected — status and sessions update in real time.'
+      ? t('layout.wsTitleConnected')
       : wsConnecting
-        ? 'Opening WebSocket connection…'
-        : 'WebSocket disconnected — retrying automatically; click to reload the page.'
+        ? t('layout.wsTitleConnecting')
+        : t('layout.wsTitleDisconnected')
     : agentWsLinked
       ? agentWsReady
-        ? 'Nanobot chat WebSocket is connected (streaming channel).'
-        : 'Connecting to nanobot chat WebSocket…'
-      : 'Console /ws push is off. Open Chat to link the agent WebSocket, or set VITE_CONSOLE_WS_URL for API push.';
+        ? t('layout.wsTitleAgentReady')
+        : t('layout.wsTitleAgentConnecting')
+      : t('layout.wsTitleLivePushOff');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useWebSocket();
@@ -154,7 +159,7 @@ export default function Layout({ children }: LayoutProps) {
 
   const selectedKey = '/' + (location.pathname.split('/')[1] || 'dashboard');
 
-  const menuItems: MenuProps['items'] = navSections.map((section) => ({
+  const menuItems: MenuProps['items'] = useMemo(() => navSections.map((section) => ({
     type: 'group',
     label: section.title,
     children: section.items.map((item) => {
@@ -169,7 +174,7 @@ export default function Layout({ children }: LayoutProps) {
         ),
       };
     }),
-  }));
+  })), [navSections]);
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -209,9 +214,9 @@ export default function Layout({ children }: LayoutProps) {
           {!sidebarCollapsed && (
             <div className="ml-3 flex flex-col">
               <span className="font-bold text-lg bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-                Nanobot
+                {t('layout.brand')}
               </span>
-              <span className="text-[10px] text-gray-400 -mt-0.5">AI Assistant</span>
+              <span className="text-[10px] text-gray-400 -mt-0.5">{t('layout.tagline')}</span>
             </div>
           )}
         </div>
@@ -241,7 +246,7 @@ export default function Layout({ children }: LayoutProps) {
               )
             }
           >
-            {!sidebarCollapsed && 'Collapse'}
+            {!sidebarCollapsed && t('layout.collapse')}
           </Button>
         </div>
 
@@ -250,8 +255,8 @@ export default function Layout({ children }: LayoutProps) {
       {/* Main Content */}
       <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* Global Header */}
-        <header className="shrink-0 sticky top-0 z-20 h-16 flex items-center justify-between px-4 lg:px-6 border-b border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-          <div className="flex items-center gap-3">
+        <header className="shrink-0 sticky top-0 z-20 h-16 flex items-center justify-between pl-14 pr-4 pt-[env(safe-area-inset-top,0px)] lg:pl-6 lg:pt-0 border-b border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+          <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
               title={wsStatusTitle}
@@ -286,7 +291,9 @@ export default function Layout({ children }: LayoutProps) {
                     <span className="flex items-center gap-1.5">
                       <Bot className="w-3.5 h-3.5 flex-shrink-0" />
                       <span>{b.name}</span>
-                      {b.is_default && <span className="text-[10px] text-blue-500">(default)</span>}
+                      {b.is_default && (
+                        <span className="text-[10px] text-blue-500">{t('common.defaultBot')}</span>
+                      )}
                     </span>
                   ),
                 }))}
@@ -296,6 +303,16 @@ export default function Layout({ children }: LayoutProps) {
           </div>
           <div className="flex items-center gap-1">
             <WebSocketDebugPanel />
+            <Select
+              value={i18n.language.startsWith('zh') ? 'zh' : 'en'}
+              onChange={(lng) => void i18n.changeLanguage(lng)}
+              options={[
+                { value: 'zh', label: t('layout.langZhShort') },
+                { value: 'en', label: t('layout.langEnShort') },
+              ]}
+              className="w-[72px]"
+              aria-label={t('layout.language')}
+            />
             <Segmented
               value={theme}
               onChange={(val) => setTheme(val as 'light' | 'dark' | 'system')}

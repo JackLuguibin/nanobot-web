@@ -49,18 +49,10 @@ body {
   background: #64748b;
 }
 
-/* Smooth transitions */
-* {
-  transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 150ms;
-}
-
-/* Disable transition for some elements */
-button, input, select, textarea {
-  transition-property: all;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-}
+/*
+ * Avoid universal element transitions — they run on every paint during scroll
+ * and streaming DOM updates. Prefer Tailwind transition-* on interactive nodes.
+ */
 
 /* Focus ring styles */
 *:focus-visible {

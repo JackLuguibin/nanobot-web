@@ -1,5 +1,6 @@
-import { useState, useEffect, type ComponentType } from 'react';
+import { useState, useEffect, useMemo, type ComponentType } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import {
   Card,
   Spin,
@@ -53,32 +54,8 @@ const ACTIVITY_COLORS: Record<string, string> = {
   error: 'red',
 };
 
-function formatTimeAgo(dateStr?: string): string {
-  if (!dateStr) return '-';
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-  return date.toLocaleDateString();
-}
-
-const ACTIVITY_TYPE_OPTIONS = [
-  { value: '', label: 'All Types' },
-  { value: 'message', label: 'Messages' },
-  { value: 'tool_call', label: 'Tool Calls' },
-  { value: 'channel', label: 'Channels' },
-  { value: 'session', label: 'Sessions' },
-  { value: 'error', label: 'Errors' },
-];
-
 export default function Activity() {
+  const { t } = useTranslation();
   const { currentBotId, setCurrentBotId } = useAppStore();
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
@@ -87,6 +64,34 @@ export default function Activity() {
     queryKey: ['bots'],
     queryFn: api.listBots,
   });
+
+  const formatTimeAgo = (dateStr?: string): string => {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (minutes < 1) return t('common.justNow');
+    if (minutes < 60) return t('common.minutesAgo', { count: minutes });
+    if (hours < 24) return t('common.hoursAgo', { count: hours });
+    if (days < 7) return t('common.daysAgo', { count: days });
+    return date.toLocaleDateString();
+  };
+
+  const activityTypeOptions = useMemo(
+    () => [
+      { value: '', label: t('activity.typeAll') },
+      { value: 'message', label: t('activity.typeMessage') },
+      { value: 'tool_call', label: t('activity.typeToolCall') },
+      { value: 'channel', label: t('activity.typeChannel') },
+      { value: 'session', label: t('activity.typeSession') },
+      { value: 'error', label: t('activity.typeError') },
+    ],
+    [t],
+  );
 
   const { data: activities, isLoading, error, refetch } = useQuery({
     queryKey: ['activity', currentBotId, typeFilter],
@@ -134,10 +139,10 @@ export default function Activity() {
       <div className="flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-            Activity
+            {t('activity.title')}
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            View bot activity feed and events
+            {t('activity.subtitle')}
           </p>
         </div>
         <Space>
@@ -149,9 +154,9 @@ export default function Activity() {
               className="w-40"
             />
           )}
-          <Badge status="processing" text={<span className="text-xs text-gray-400">Live</span>} />
+          <Badge status="processing" text={<span className="text-xs text-gray-400">{t('common.live')}</span>} />
           <Button icon={<ReloadOutlined />} onClick={() => refetch()}>
-            Refresh
+            {t('common.refresh')}
           </Button>
         </Space>
       </div>
@@ -162,7 +167,7 @@ export default function Activity() {
           className="activity-seg-align"
           value={typeFilter}
           onChange={(val) => setTypeFilter(String(val))}
-          options={ACTIVITY_TYPE_OPTIONS}
+          options={activityTypeOptions}
         />
         <Segmented
           value={sortOrder}
@@ -197,7 +202,7 @@ export default function Activity() {
             <Empty
               description={
                 <span className="text-red-500">
-                  Failed to load activity: {String(error)}
+                  {t('activity.loadFailed', { error: String(error) })}
                 </span>
               }
             />
@@ -261,7 +266,7 @@ export default function Activity() {
           </Card>
         ) : (
           <Card className="rounded-xl border border-gray-200/80 dark:border-gray-700/60">
-            <Empty description="No activity yet" />
+            <Empty description={t('activity.empty')} />
           </Card>
         )}
       </div>

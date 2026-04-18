@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import {
   Card,
   Tree,
@@ -59,6 +60,7 @@ function buildTreeData(
 
 export default function Workspace() {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const { currentBotId, addToast } = useAppStore();
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'preview' | 'code' | 'edit'>('preview');
@@ -80,7 +82,7 @@ export default function Workspace() {
     mutationFn: ({ path, content }: { path: string; content: string }) =>
       api.updateWorkspaceFile(path, content, currentBotId),
     onSuccess: () => {
-      addToast({ type: 'success', message: '文件已保存' });
+      addToast({ type: 'success', message: t('workspace.saved') });
       setViewMode('preview');
       setEditMode(false);
       queryClient.invalidateQueries({ queryKey: ['workspace-file', currentBotId, selectedFile!] });

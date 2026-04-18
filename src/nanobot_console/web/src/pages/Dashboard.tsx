@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useAppStore } from '../store';
 import * as api from '../api/client';
 import {
@@ -32,10 +34,12 @@ import { formatTokenCount, formatCost } from '../utils/format';
 const { Text } = Typography;
 
 /** 将 usageHistory 转为柱状图分组数据 */
-function toColumnData(history: UsageHistoryItem[]) {
+function toColumnData(history: UsageHistoryItem[], t: TFunction) {
+  const prompt = t('dashboard.chartPrompt');
+  const completion = t('dashboard.chartCompletion');
   return history.flatMap((d) => [
-    { date: d.date, type: '输入', value: d.prompt_tokens ?? 0 },
-    { date: d.date, type: '输出', value: d.completion_tokens ?? 0 },
+    { date: d.date, type: prompt, value: d.prompt_tokens ?? 0 },
+    { date: d.date, type: completion, value: d.completion_tokens ?? 0 },
   ]);
 }
 
@@ -47,6 +51,7 @@ function formatUptime(seconds: number): string {
 }
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { setStatus, setChannels, setMCPServers, status, addToast, currentBotId } = useAppStore();
 
@@ -83,12 +88,12 @@ export default function Dashboard() {
       const botId =
         currentBotId || bots.find((b) => b.is_default)?.id || bots[0]?.id;
       if (!botId) {
-        return Promise.reject(new Error('无法确定当前 Bot，请先在侧栏选择 Bot'));
+        return Promise.reject(new Error(t('dashboard.botRequired')));
       }
       return api.stopBot(botId);
     },
     onSuccess: () => {
-      addToast({ type: 'success', message: 'Bot 已停止' });
+      addToast({ type: 'success', message: t('dashboard.toastStopped') });
       queryClient.invalidateQueries({ queryKey: ['status'] });
       queryClient.invalidateQueries({ queryKey: ['bots'] });
       queryClient.invalidateQueries({ queryKey: ['usage-history', currentBotId] });
@@ -103,13 +108,13 @@ export default function Dashboard() {
       const botId =
         currentBotId || bots.find((b) => b.is_default)?.id || bots[0]?.id;
       if (!botId) {
-        return Promise.reject(new Error('无法确定当前 Bot，请先在侧栏选择 Bot'));
+        return Promise.reject(new Error(t('dashboard.botRequired')));
       }
       await api.stopBot(botId);
       await api.startBot(botId);
     },
     onSuccess: () => {
-      addToast({ type: 'success', message: 'Bot 重启成功' });
+      addToast({ type: 'success', message: t('dashboard.toastRestartOk') });
       queryClient.invalidateQueries({ queryKey: ['status'] });
       queryClient.invalidateQueries({ queryKey: ['bots'] });
       queryClient.invalidateQueries({ queryKey: ['usage-history', currentBotId] });
@@ -121,9 +126,9 @@ export default function Dashboard() {
 
   const handleRestart = () => {
     Modal.confirm({
-      title: 'Restart Bot',
-      content: 'Are you sure you want to restart the bot?',
-      okText: 'Restart',
+      title: t('dashboard.restartTitle'),
+      content: t('dashboard.restartContent'),
+      okText: t('dashboard.restartOk'),
       onOk: () => restartMutation.mutate(),
     });
   };
@@ -141,7 +146,7 @@ export default function Dashboard() {
       <div className="p-6">
         <Alert
           type="error"
-          message="Error loading status"
+          message={t('dashboard.loadError')}
           description={String(error)}
           showIcon
         />
@@ -155,9 +160,9 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-            Dashboard
+            {t('dashboard.title')}
           </h1>
-          <p className="text-sm text-gray-500 mt-1">Monitor your Nanobot assistant</p>
+          <p className="text-sm text-gray-500 mt-1">{t('dashboard.subtitle')}</p>
         </div>
         <Space>
           {displayStatus?.running && (
@@ -167,7 +172,7 @@ export default function Dashboard() {
               loading={stopMutation.isPending}
               onClick={() => stopMutation.mutate()}
             >
-              <span className="hidden sm:inline">Stop</span>
+              <span className="hidden sm:inline">{t('dashboard.stop')}</span>
             </Button>
           )}
           <Button
@@ -175,7 +180,7 @@ export default function Dashboard() {
             loading={restartMutation.isPending}
             onClick={handleRestart}
           >
-            <span className="hidden sm:inline">Restart</span>
+            <span className="hidden sm:inline">{t('dashboard.restart')}</span>
           </Button>
           <Button
             icon={<ReloadOutlined />}
@@ -193,8 +198,8 @@ export default function Dashboard() {
       >
         <Card hoverable className="h-full min-w-0 [&_.ant-card-body]:flex [&_.ant-card-body]:flex-col [&_.ant-card-body]:h-full [&_.ant-card-body]:min-w-0">
           <Statistic
-            title="Status"
-            value={displayStatus?.running ? 'Running' : 'Stopped'}
+            title={t('dashboard.statStatus')}
+            value={displayStatus?.running ? t('dashboard.statRunning') : t('dashboard.statStopped')}
             styles={{ content: { color: displayStatus?.running ? '#16a34a' : '#9ca3af' } }}
             prefix={
               displayStatus?.running ? (
@@ -207,28 +212,28 @@ export default function Dashboard() {
         </Card>
         <Card hoverable className="h-full min-w-0 [&_.ant-card-body]:flex [&_.ant-card-body]:flex-col [&_.ant-card-body]:h-full [&_.ant-card-body]:min-w-0">
           <Statistic
-            title="Uptime"
+            title={t('dashboard.statUptime')}
             value={displayStatus?.running && displayStatus?.uptime_seconds ? formatUptime(displayStatus.uptime_seconds) : '-'}
             prefix={<ClockCircleOutlined className="text-blue-500" />}
           />
         </Card>
         <Card hoverable className="h-full min-w-0 [&_.ant-card-body]:flex [&_.ant-card-body]:flex-col [&_.ant-card-body]:h-full [&_.ant-card-body]:min-w-0">
           <Statistic
-            title="Active Sessions"
+            title={t('dashboard.statActiveSessions')}
             value={displayStatus?.active_sessions ?? 0}
             prefix={<TeamOutlined className="text-purple-500" />}
           />
         </Card>
         <Card hoverable className="h-full min-w-0 [&_.ant-card-body]:flex [&_.ant-card-body]:flex-col [&_.ant-card-body]:h-full [&_.ant-card-body]:min-w-0">
           <Statistic
-            title="Messages Today"
+            title={t('dashboard.statMessagesToday')}
             value={displayStatus?.messages_today ?? 0}
             prefix={<MessageOutlined className="text-orange-500" />}
           />
         </Card>
         <Card hoverable className="h-full min-w-0 [&_.ant-card-body]:flex [&_.ant-card-body]:flex-col [&_.ant-card-body]:h-full [&_.ant-card-body]:min-w-0">
           <Statistic
-            title="Tokens Today"
+            title={t('dashboard.statTokensToday')}
             value={
               displayStatus?.token_usage?.total_tokens != null
                 ? formatTokenCount(displayStatus.token_usage.total_tokens)
@@ -239,7 +244,7 @@ export default function Dashboard() {
         </Card>
         <Card hoverable className="h-full min-w-0 [&_.ant-card-body]:flex [&_.ant-card-body]:flex-col [&_.ant-card-body]:h-full [&_.ant-card-body]:min-w-0">
           <Statistic
-            title="Cost Today"
+            title={t('dashboard.statCostToday')}
             value={
               displayStatus?.token_usage?.cost_usd != null && displayStatus.token_usage.cost_usd > 0
                 ? formatCost(displayStatus.token_usage.cost_usd)
@@ -260,7 +265,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <Text type="secondary" className="text-xs">
-                  Current Model
+                  {t('dashboard.currentModel')}
                 </Text>
                 <p className="font-semibold text-base">{displayStatus.model}</p>
               </div>
@@ -269,20 +274,20 @@ export default function Dashboard() {
               <div className="flex flex-col gap-2 text-sm">
                 <div className="flex items-center gap-4">
                   <div>
-                    <Text type="secondary" className="text-xs block">今日 Token 使用</Text>
+                    <Text type="secondary" className="text-xs block">{t('dashboard.tokenUsageToday')}</Text>
                     <span className="font-medium">
                       {formatTokenCount(displayStatus?.token_usage?.total_tokens ?? 0)}
                     </span>
-                    <Text type="secondary" className="text-xs ml-1">total</Text>
+                    <Text type="secondary" className="text-xs ml-1">{t('common.total')}</Text>
                   </div>
                   <div>
-                    <Text type="secondary" className="text-xs block">输入</Text>
+                    <Text type="secondary" className="text-xs block">{t('dashboard.chartPrompt')}</Text>
                     <span className="font-medium">
                       {formatTokenCount(displayStatus?.token_usage?.prompt_tokens ?? 0)}
                     </span>
                   </div>
                   <div>
-                    <Text type="secondary" className="text-xs block">输出</Text>
+                    <Text type="secondary" className="text-xs block">{t('dashboard.chartCompletion')}</Text>
                     <span className="font-medium">
                       {formatTokenCount(displayStatus?.token_usage?.completion_tokens ?? 0)}
                     </span>
@@ -308,7 +313,7 @@ export default function Dashboard() {
             {/* 每日 Token 用量趋势图 */}
             {usageHistory && usageHistory.length > 0 && (
               <div className="w-full min-w-[320px]" style={{ maxWidth: 480 }}>
-                <Text type="secondary" className="text-xs block mb-1">每日 Token 用量</Text>
+                <Text type="secondary" className="text-xs block mb-1">{t('dashboard.dailyTokenUsage')}</Text>
                 <div style={{ height: 44 }}>
                   <Tiny.Area
                     data={usageHistory.map((d) => ({
@@ -333,7 +338,7 @@ export default function Dashboard() {
         <Card
           title={
             <span className="flex items-center gap-2">
-              <BarChartOutlined className="text-amber-500" /> 每日 Token 使用量
+              <BarChartOutlined className="text-amber-500" /> {t('dashboard.dailyTokenUsage')}
             </span>
           }
           size="small"
@@ -345,7 +350,7 @@ export default function Dashboard() {
           ) : usageHistory && usageHistory.length > 0 ? (
             <div className="h-[280px] w-full" style={{ minHeight: 240 }}>
               <Column
-                data={toColumnData(usageHistory)}
+                data={toColumnData(usageHistory, t)}
                 xField="date"
                 yField="value"
                 seriesField="type"
@@ -356,7 +361,11 @@ export default function Dashboard() {
                 }}
                 style={{
                   fill: (d: { type: string }) =>
-                    d.type === '输入' ? '#3b82f6' : d.type === '输出' ? '#22c55e' : '#94a3b8',
+                    d.type === t('dashboard.chartPrompt')
+                      ? '#3b82f6'
+                      : d.type === t('dashboard.chartCompletion')
+                        ? '#22c55e'
+                        : '#94a3b8',
                 }}
                 label={{
                   text: 'value',
@@ -388,7 +397,7 @@ export default function Dashboard() {
             </div>
           ) : (
             <Text type="secondary" className="block text-center py-12">
-              暂无使用数据，与模型对话后会自动记录
+              {t('dashboard.noUsageData')}
             </Text>
           )}
         </Card>
@@ -396,7 +405,7 @@ export default function Dashboard() {
         <Card
           title={
             <span className="flex items-center gap-2">
-              <ThunderboltOutlined className="text-amber-500" /> 按模型消耗占比
+              <ThunderboltOutlined className="text-amber-500" /> {t('dashboard.modelShareTitle')}
             </span>
           }
           size="small"
@@ -436,7 +445,7 @@ export default function Dashboard() {
                 ))}
               {(!(displayStatus?.token_usage?.by_model) ||
                 Object.entries(displayStatus?.token_usage?.by_model ?? {}).filter(([, u]) => (u.total_tokens ?? 0) > 0).length === 0) && (
-                <Text type="secondary" className="text-xs">暂无数据</Text>
+                <Text type="secondary" className="text-xs">{t('dashboard.noData')}</Text>
               )}
             </div>
           </div>

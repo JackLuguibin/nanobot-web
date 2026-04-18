@@ -9,6 +9,8 @@ import {
 import { flushSync } from "react-dom";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import i18n from "../i18n";
 import { Markdown } from "../components/Markdown";
 import { useAppStore } from "../store";
 import {
@@ -19,7 +21,7 @@ import {
 } from "../hooks/useNanobotChannelWebSocket";
 import { registerChatHandler, getWSRef } from "../hooks/useWebSocket";
 import * as api from "../api/client";
-import { Button, Tag, Popconfirm, Checkbox } from "antd";
+import { Button, Tag, Popconfirm, Checkbox, Spin } from "antd";
 import {
   PlusOutlined,
   LoadingOutlined,
@@ -219,6 +221,7 @@ function ChatInput({
   contextUsage,
   contextLoading,
 }: ChatInputProps) {
+  const { t } = useTranslation();
   const [focused, setFocused] = useState(false);
   const canSend = value.trim().length > 0;
 
@@ -238,7 +241,7 @@ function ChatInput({
           onKeyDown={onKeyDown}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          placeholder="Send a message..."
+          placeholder={t("chat.inputPlaceholder")}
           autoSize={{ minRows: 1, maxRows: 8 }}
           variant="borderless"
           className="!text-[15px] !leading-relaxed !py-3.5 !px-4 !pr-14 resize-none bg-transparent"
@@ -251,10 +254,10 @@ function ChatInput({
             {isStreaming ? (
               <span className="flex items-center gap-1.5 text-blue-500">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                Generating…
+                {t("chat.generating")}
               </span>
             ) : (
-              <span>Enter to send · Shift+Enter for new line</span>
+              <span>{t("chat.inputHint")}</span>
             )}
           </span>
 
@@ -262,12 +265,12 @@ function ChatInput({
             {showContextMeter && (
               <div
                 className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-gray-100/90 dark:bg-gray-800/90 border border-gray-200/80 dark:border-gray-600/80 text-[11px] tabular-nums text-gray-600 dark:text-gray-300 max-w-[min(100vw-8rem,14rem)]"
-                title="Context: estimated / window · % used (refreshed via /status_json after each reply)"
+                title={t("chat.contextTooltip")}
               >
                 {contextLoading ? (
                   <span className="flex items-center gap-1 text-gray-400">
                     <LoadingOutlined className="text-[10px]" />
-                    Loading…
+                    {t("chat.contextLoading")}
                   </span>
                 ) : contextUsage ? (
                   <span className="truncate">
@@ -294,7 +297,7 @@ function ChatInput({
                   ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/30 hover:shadow-blue-500/40 hover:scale-105"
                   : "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed"
             }`}
-            title={isStreaming ? "Stop generating" : "Send message"}
+            title={isStreaming ? t("chat.stop") : t("chat.send")}
           >
             {isStreaming ? (
               <Square className="w-3.5 h-3.5 fill-current" />
@@ -414,7 +417,7 @@ function formatToolCallArgumentsForDisplay(
   args: Record<string, unknown> | undefined,
 ): string {
   if (args === undefined) {
-    return "Arguments missing (legacy or incomplete message).";
+    return i18n.t("chat.argumentsMissing");
   }
   try {
     return JSON.stringify(args, null, 2);
@@ -477,6 +480,7 @@ function ToolCallParametersTable({
 }: {
   args: Record<string, unknown>;
 }) {
+  const { t } = useTranslation();
   const internalKeys = new Set(["_raw", "_value"]);
   const primary = Object.entries(args).filter(([k]) => !internalKeys.has(k));
   const internal = Object.entries(args).filter(([k]) => internalKeys.has(k));
@@ -484,7 +488,7 @@ function ToolCallParametersTable({
   if (primary.length === 0 && internal.length === 0) {
     return (
       <p className="text-[12px] text-slate-500 dark:text-slate-400 m-0">
-        (No arguments)
+        {t("chat.noArguments")}
       </p>
     );
   }
@@ -511,7 +515,7 @@ function ToolCallParametersTable({
       {internal.length > 0 ? (
         <div className="rounded-lg bg-amber-50/90 dark:bg-amber-950/25 ring-1 ring-amber-200/80 dark:ring-amber-800/45 px-3 py-2 space-y-2">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-800/90 dark:text-amber-200/85">
-            Partial / unparsed argument payload
+            {t("chat.partialPayload")}
           </div>
           {internal.map(([key, value]) => (
             <div key={key}>
@@ -528,6 +532,7 @@ function ToolCallParametersTable({
 }
 
 function ToolCallIdCopy({ callId }: { callId: string }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   const onCopy = useCallback(() => {
@@ -549,8 +554,8 @@ function ToolCallIdCopy({ callId }: { callId: string }) {
         type="button"
         onClick={onCopy}
         className="shrink-0 rounded-md p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 dark:hover:bg-white/10 dark:hover:text-slate-200 transition-colors"
-        title="Copy call ID"
-        aria-label="Copy call ID"
+        title={t("chat.copyCallId")}
+        aria-label={t("chat.copyCallId")}
       >
         {copied ? (
           <Check
@@ -611,6 +616,7 @@ function mergeToolResultsIntoAssistantMessages(messages: Message[]): Message[] {
 }
 
 function MessageThinkingBlock({ text }: { text: string }) {
+  const { t } = useTranslation();
   const trimmed = text.trim();
   if (!trimmed) {
     return null;
@@ -629,7 +635,7 @@ function MessageThinkingBlock({ text }: { text: string }) {
           strokeWidth={2}
         />
         <span className="text-[13px] font-medium text-slate-600 dark:text-slate-300 tracking-tight">
-          Thinking
+          {t("chat.thinking")}
         </span>
       </summary>
       <div className="px-3.5 pb-3.5 pt-0">
@@ -651,6 +657,7 @@ function MessageToolCallsBlock({
   /** 外层已有分隔/间距时置为 true，避免重复上边距 */
   noTopMargin?: boolean;
 }) {
+  const { t } = useTranslation();
   const normalizedList = useMemo(() => {
     const list = tool_calls ?? [];
     return normalizeToolCallsArray(list as unknown);
@@ -669,7 +676,7 @@ function MessageToolCallsBlock({
           aria-hidden
         />
         <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-          Tool calls
+          {t("chat.toolCalls")}
         </span>
       </div>
       <div className="space-y-2">
@@ -688,7 +695,7 @@ function MessageToolCallsBlock({
                 />
                 <span
                   className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-slate-200/90 text-slate-600 dark:bg-slate-700/90 dark:text-slate-300"
-                  title="tool_call.type"
+                  title={t("chat.toolCallType")}
                 >
                   {tc.tool_call_type ?? "function"}
                 </span>
@@ -698,8 +705,8 @@ function MessageToolCallsBlock({
                 {tc.result !== undefined ? (
                   <span
                     className="inline-flex shrink-0"
-                    title="Completed"
-                    aria-label="Tool call completed"
+                    title={t("chat.toolCompleted")}
+                    aria-label={t("chat.toolCompleted")}
                   >
                     <CheckCircle2
                       className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400"
@@ -721,20 +728,20 @@ function MessageToolCallsBlock({
                 <div className="pt-3 space-y-3">
                   <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 shrink-0">
-                      Call ID
+                      {t("chat.callId")}
                     </span>
                     <ToolCallIdCopy callId={tc.id} />
                   </div>
                   <div>
                     <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
-                      Parameters
+                      {t("chat.parameters")}
                     </div>
                     <ToolCallParametersTable args={tc.arguments} />
                   </div>
                   {tc.result !== undefined ? (
                     <div>
                       <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
-                        Result
+                        {t("chat.result")}
                       </div>
                       <pre className="text-[11px] sm:text-xs font-mono leading-relaxed m-0 whitespace-pre-wrap break-words text-slate-700 dark:text-slate-200 bg-emerald-50/80 dark:bg-emerald-950/35 rounded-md px-2.5 py-2 ring-1 ring-inset ring-emerald-200/70 dark:ring-emerald-800/45 max-h-56 overflow-y-auto">
                         {tc.result || "(empty)"}
@@ -743,7 +750,7 @@ function MessageToolCallsBlock({
                   ) : null}
                   <details className="group/json rounded-lg ring-1 ring-slate-200/65 dark:ring-slate-600/45 bg-slate-50/60 dark:bg-slate-950/40">
                     <summary className="cursor-pointer list-none px-3 py-2 text-[11px] font-medium text-slate-500 dark:text-slate-400 [&::-webkit-details-marker]:hidden hover:bg-slate-100/70 dark:hover:bg-white/[0.05] rounded-lg transition-colors">
-                      Raw JSON (parsed arguments object)
+                      {t("chat.rawJson")}
                     </summary>
                     <pre className="text-[11px] sm:text-xs font-mono leading-relaxed text-slate-600 dark:text-slate-400 px-3 pb-3 pt-0 m-0 overflow-x-auto whitespace-pre-wrap break-words">
                       {formatToolCallArgumentsForDisplay(tc.arguments)}
@@ -824,6 +831,7 @@ function readNanobotChatNewIntent(): boolean {
 }
 
 export default function Chat() {
+  const { t, i18n } = useTranslation();
   const { sessionKey: paramSessionKey } = useParams();
   const resumeNanobotChatUuid = useMemo(
     () => tryParseNanobotResumeChatId(paramSessionKey),
@@ -1314,10 +1322,10 @@ export default function Chat() {
       } catch {
         // ignore
       }
-      addToast({ type: "success", message: "会话已删除" });
+      addToast({ type: "success", message: t("chat.toastSessionDeleted") });
     },
     onError: () => {
-      addToast({ type: "error", message: "删除会话失败" });
+      addToast({ type: "error", message: t("chat.toastSessionDeleteFailed") });
     },
   });
 
@@ -1399,17 +1407,17 @@ export default function Chat() {
       if (failed > 0) {
         addToast({
           type: deleted > 0 ? "warning" : "error",
-          message: `已删除 ${deleted} 个，${failed} 个失败`,
+          message: t("chat.toastBatchPartial", { deleted, failed }),
         });
       } else {
-        addToast({ type: "success", message: `已删除 ${deleted} 个会话` });
+        addToast({ type: "success", message: t("chat.toastBatchDeleted", { count: deleted }) });
       }
     },
     onError: () => {
       void queryClient.invalidateQueries({
         queryKey: ["sessions", currentBotId],
       });
-      addToast({ type: "error", message: "批量删除失败" });
+      addToast({ type: "error", message: t("chat.toastBatchFailed") });
     },
   });
 
@@ -1614,8 +1622,9 @@ export default function Chat() {
           chunk.type === "nanobot_status_json" ||
           chunk.type === "channel_notice"
         ) {
-          const t = typeof chunk.content === "string" ? chunk.content : "";
-          silentStatusJsonBufferRef.current += t;
+          const chunkText =
+            typeof chunk.content === "string" ? chunk.content : "";
+          silentStatusJsonBufferRef.current += chunkText;
           const assembled = silentStatusJsonBufferRef.current;
           if (parseNanobotStatusJson(assembled) !== null) {
             completeSilentStatusJsonPoll(assembled, { fromEarlyParse: true });
@@ -1962,8 +1971,7 @@ export default function Chat() {
       streamingContentRef.current = "";
       addToast({
         type: "error",
-        message:
-          "nanobot WebSocket 发送失败，请确认 nanobot 已启动且 ws 频道已启用",
+        message: t("chat.toastWsSendFailed"),
       });
     }
   }, [
@@ -1973,6 +1981,7 @@ export default function Chat() {
     sendNanobotMessage,
     addToast,
     cancelStreamTokenFlush,
+    t,
   ]);
 
   /** After each nanobot channel `ready` (connect or reconnect), refresh context via `/status_json`. */
@@ -2039,8 +2048,7 @@ export default function Chat() {
             pendingNanobotOutboundRef.current = null;
             addToast({
               type: "error",
-              message:
-                "nanobot WebSocket 发送失败，请确认 nanobot 已启动且 ws 频道已启用",
+              message: t("chat.toastWsSendFailed"),
             });
           }
         }
@@ -2062,8 +2070,7 @@ export default function Chat() {
         streamingContentRef.current = "";
         addToast({
           type: "error",
-          message:
-            "nanobot WebSocket 未连接，请确认 nanobot 已启动且 ws 频道已启用",
+          message: t("chat.toastWsNotReady"),
         });
       }
       return;
@@ -2075,7 +2082,7 @@ export default function Chat() {
       setIsStreaming(false);
       setStreamingContent("");
       streamingContentRef.current = "";
-      addToast({ type: "error", message: "WebSocket not connected" });
+      addToast({ type: "error", message: t("chat.toastWsNotConnected") });
       return;
     }
 
@@ -2101,7 +2108,7 @@ export default function Chat() {
     setStreamingReasoningContent("");
     streamingPayloadToolCallsRef.current = [];
     streamingReasoningContentRef.current = "";
-    addToast({ type: "info", message: "Generation stopped" });
+    addToast({ type: "info", message: t("chat.toastStopped") });
   };
 
   const handleNewChat = () => {
@@ -2142,17 +2149,23 @@ export default function Chat() {
     setSessionsSidebarOpen(false);
   };
 
-  const suggestions = [
-    {
-      text: "Review the code structure of the current repository.",
-      label: "Review code structure",
-    },
-    {
-      text: "What automation options can be integrated?",
-      label: "View automation options",
-    },
-    { text: "Write a simple Python script for me", label: "Write a script" },
-  ];
+  const suggestions = useMemo(
+    () => [
+      {
+        text: t("chat.suggestionReviewText"),
+        label: t("chat.suggestionReviewLabel"),
+      },
+      {
+        text: t("chat.suggestionAutomationText"),
+        label: t("chat.suggestionAutomationLabel"),
+      },
+      {
+        text: t("chat.suggestionScriptText"),
+        label: t("chat.suggestionScriptLabel"),
+      },
+    ],
+    [t],
+  );
 
   const toolCallTagColor = (status: TrackedToolCall["status"]) => {
     if (status === "running") return "processing";
@@ -2160,17 +2173,24 @@ export default function Chat() {
     return "error";
   };
 
+  const trackedToolStatusLabel = (status: TrackedToolCall["status"]) => {
+    if (status === "running") return t("subagent.running");
+    if (status === "success") return t("subagent.completed");
+    return t("subagent.failed");
+  };
+
   /** 格式化消息时间：年月日 + 时:分:秒.毫秒（三位） */
   const formatMessageTime = (isoStr: string | undefined): string => {
     if (!isoStr) return "";
     try {
       const d = new Date(isoStr);
-      const dateStr = d.toLocaleDateString("zh-CN", {
+      const locale = i18n.language.startsWith("zh") ? "zh-CN" : "en-US";
+      const dateStr = d.toLocaleDateString(locale, {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
       });
-      const timeStr = d.toLocaleTimeString("zh-CN", {
+      const timeStr = d.toLocaleTimeString(locale, {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
@@ -2219,7 +2239,7 @@ export default function Chat() {
         <div className="h-12 shrink-0 px-3.5 flex items-center gap-3 border-b border-gray-200/50 dark:border-gray-700/50 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm min-w-0">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate min-w-0">
-              Sessions
+              {t("chat.sessionsTitle")}
             </span>
             {sessions && sessions.length > 0 ? (
               <div className="flex items-center gap-2 shrink-0">
@@ -2238,12 +2258,14 @@ export default function Chat() {
                       setBatchSelectedKeys(new Set());
                     }
                   }}
-                  title="全选"
+                  title={t("chat.selectAll")}
                 />
                 {batchSelectedKeys.size > 0 ? (
                   <span
                     className="text-xs leading-none text-gray-500 dark:text-gray-400 tabular-nums min-w-[1.25rem]"
-                    title={`已选 ${batchSelectedKeys.size} 个`}
+                    title={t("chat.selectedCount", {
+                      count: batchSelectedKeys.size,
+                    })}
                   >
                     {batchSelectedKeys.size}
                   </span>
@@ -2254,13 +2276,15 @@ export default function Chat() {
           <div className="flex items-center gap-0.5 shrink-0">
             {sessions && sessions.length > 0 ? (
               <Popconfirm
-                title="批量删除会话"
-                description={`确定删除已选的 ${batchSelectedKeys.size} 个会话？`}
+                title={t("chat.batchDeleteTitle")}
+                description={t("chat.batchDeleteDesc", {
+                  count: batchSelectedKeys.size,
+                })}
                 onConfirm={() =>
                   deleteSessionsBatchMutation.mutate([...batchSelectedKeys])
                 }
-                okText="删除"
-                cancelText="取消"
+                okText={t("common.delete")}
+                cancelText={t("common.cancel")}
                 okButtonProps={{ danger: true }}
                 disabled={batchSelectedKeys.size === 0}
               >
@@ -2275,7 +2299,7 @@ export default function Chat() {
                     deleteSessionsBatchMutation.isPending
                   }
                   loading={deleteSessionsBatchMutation.isPending}
-                  title="批量删除"
+                  title={t("chat.batchDelete")}
                 />
               </Popconfirm>
             ) : null}
@@ -2287,11 +2311,25 @@ export default function Chat() {
                 setSessionsSidebarOpen(false);
               }}
               className="!w-9 !h-9 !min-w-9 flex items-center justify-center"
-              title="收起会话列表"
+              title={t("chat.collapseSidebar")}
             />
           </div>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-3.5 py-4 space-y-3">
+          {sessionsListPending && sessions === undefined ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-gray-500 dark:text-gray-400">
+              <Spin size="small" />
+              <span className="text-xs">{t("chat.loadSessions")}</span>
+            </div>
+          ) : sessionsListError ? (
+            <p className="text-sm text-center text-amber-700 dark:text-amber-300 px-2 py-6 leading-relaxed">
+              {t("chat.sessionsLoadError")}
+            </p>
+          ) : !sessions?.length ? (
+            <p className="text-sm text-center text-gray-500 dark:text-gray-400 px-2 py-10 leading-relaxed">
+              {t("chat.sessionsEmpty")}
+            </p>
+          ) : null}
           {sessions?.map((session) => (
             <div
               key={session.key}
@@ -2336,7 +2374,7 @@ export default function Chat() {
                   {session.title || session.key}
                 </span>
                 <span className="text-xs text-gray-500 mt-1.5 block leading-relaxed">
-                  {session.message_count} messages
+                  {t("chat.messageCount", { count: session.message_count })}
                 </span>
                 {session.created_at && (
                   <span className="text-xs text-gray-400 dark:text-gray-500 mt-1 block leading-relaxed">
@@ -2345,17 +2383,19 @@ export default function Chat() {
                 )}
               </button>
               <Popconfirm
-                title="删除会话"
-                description={`确定删除「${session.title || session.key}」？`}
+                title={t("chat.deleteSessionTitle")}
+                description={t("chat.deleteSessionDesc", {
+                  name: session.title || session.key,
+                })}
                 onConfirm={() => deleteSessionMutation.mutate(session.key)}
-                okText="删除"
-                cancelText="取消"
+                okText={t("common.delete")}
+                cancelText={t("common.cancel")}
                 okButtonProps={{ danger: true }}
               >
                 <button
                   type="button"
                   onClick={(e) => e.stopPropagation()}
-                  title="删除会话"
+                  title={t("chat.deleteSession")}
                   className="self-center shrink-0 w-9 h-9 mr-2 my-2 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:text-gray-500 dark:hover:text-red-400 dark:hover:bg-red-500/10 transition-colors duration-150"
                 >
                   <DeleteOutlined className="text-base" />
@@ -2380,7 +2420,7 @@ export default function Chat() {
           icon={<MenuUnfoldOutlined />}
           onClick={() => setSessionsSidebarCollapsed(false)}
           className="hidden md:flex absolute left-2 top-20 z-30 text-gray-500 hover:text-primary-500 bg-white/80 dark:bg-gray-900/80 rounded-full shadow"
-          title="展开会话"
+          title={t("chat.expandSidebar")}
         />
       )}
 
@@ -2394,20 +2434,33 @@ export default function Chat() {
                 <Bot className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold">Chat</h2>
-                <p className="text-xs text-gray-500">Work with Nanobot</p>
+                <h2 className="text-lg font-semibold">{t("chat.title")}</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {t("chat.subtitle")}
+                </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               {sessions && sessions.length > 0 && (
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={handleNewChat}
-                  className="hidden md:flex"
-                >
-                  New Chat
-                </Button>
+                <>
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={handleNewChat}
+                    className="hidden md:inline-flex"
+                  >
+                    {t("chat.newChat")}
+                  </Button>
+                  <Button
+                    type="primary"
+                    shape="circle"
+                    icon={<PlusOutlined />}
+                    onClick={handleNewChat}
+                    className="md:!hidden shrink-0"
+                    title={t("chat.newChat")}
+                    aria-label={t("chat.newChat")}
+                  />
+                </>
               )}
             </div>
           </div>
@@ -2423,11 +2476,10 @@ export default function Chat() {
                   <Bot className="w-10 h-10 text-primary-600" />
                 </div>
                 <h3 className="text-2xl font-bold mb-3 bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-                  Hello, how can I help you today?
+                  {t("chat.heroTitle")}
                 </h3>
-                <p className="text-sm text-gray-500 mb-8 max-w-md">
-                  Ask anything about your projects, code, or environment.
-                  I&apos;ll use your Nanobot setup to help.
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-8 max-w-md">
+                  {t("chat.heroSubtitle")}
                 </p>
                 <div className="grid gap-3 w-full max-w-xl">
                   {suggestions.map((suggestion, idx) => (
@@ -2437,7 +2489,7 @@ export default function Chat() {
                         setInput(suggestion.text);
                         inputRef.current?.focus();
                       }}
-                      className="flex items-center justify-between px-5 py-4 rounded-xl bg-white dark:bg-gray-800 shadow-sm hover:shadow-lg border border-gray-100 dark:border-gray-700 text-left text-sm hover:scale-[1.02] transition-all group"
+                      className="flex items-center justify-between px-5 py-4 rounded-xl bg-white dark:bg-gray-800 shadow-sm hover:shadow-md border border-gray-100 dark:border-gray-700 text-left text-sm transition-shadow duration-200 group"
                     >
                       <div className="flex items-center gap-3">
                         <Wand2 className="w-4 h-4 text-primary-500" />
@@ -2536,7 +2588,7 @@ export default function Chat() {
                                   aria-hidden
                                 />
                                 <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-700/90 dark:text-amber-400/90">
-                                  Status
+                                  {t("chat.statusLabel")}
                                 </span>
                               </div>
                               {streamingChannelNotices.map((line, idx) => (
@@ -2600,7 +2652,7 @@ export default function Chat() {
                                   aria-hidden
                                 />
                                 <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                                  Tool calls
+                                  {t("chat.toolCalls")}
                                 </span>
                               </div>
                               {streamingToolProgress.map((hint, idx) => (
@@ -2613,7 +2665,18 @@ export default function Chat() {
                               ))}
                             </div>
                           ) : null}
-                          <LoadingOutlined className="mt-2 text-primary-500" />
+                          {streamingContent.trim().length > 0 ? (
+                            <span
+                              className="mt-3 inline-flex items-center gap-1 text-primary-500"
+                              aria-hidden
+                            >
+                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-pulse [animation-delay:150ms]" />
+                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-pulse [animation-delay:300ms]" />
+                            </span>
+                          ) : (
+                            <LoadingOutlined className="mt-2 text-primary-500" />
+                          )}
                         </div>
                       </div>
 
@@ -2648,7 +2711,7 @@ export default function Chat() {
                                   {tc.name}
                                 </span>
                                 <Tag color={toolCallTagColor(tc.status)}>
-                                  {tc.status}
+                                  {trackedToolStatusLabel(tc.status)}
                                 </Tag>
                               </div>
                               {tc.args && (

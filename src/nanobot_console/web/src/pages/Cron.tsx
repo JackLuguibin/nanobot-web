@@ -29,6 +29,7 @@ import {
   DownOutlined,
   UpOutlined,
 } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import * as api from '../api/client';
 import { useAppStore } from '../store';
 import type { CronJob, CronScheduleKind } from '../api/types';
@@ -117,6 +118,7 @@ function CronJobDetails({ job }: { job: CronJob }) {
 }
 
 export default function Cron() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { addToast, currentBotId } = useAppStore();
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -173,7 +175,7 @@ export default function Cron() {
       );
     },
     onSuccess: () => {
-      addToast({ type: 'success', message: '定时任务已添加' });
+      addToast({ type: 'success', message: t('cron.added') });
       setAddModalOpen(false);
       form.resetFields();
       queryClient.invalidateQueries({ queryKey: ['cron', currentBotId] });
@@ -185,7 +187,7 @@ export default function Cron() {
   const removeMutation = useMutation({
     mutationFn: (jobId: string) => api.removeCronJob(jobId, currentBotId),
     onSuccess: () => {
-      addToast({ type: 'success', message: '任务已删除' });
+      addToast({ type: 'success', message: t('cron.deleted') });
       queryClient.invalidateQueries({ queryKey: ['cron', currentBotId] });
       queryClient.invalidateQueries({ queryKey: ['cron-status', currentBotId] });
     },
@@ -205,7 +207,7 @@ export default function Cron() {
   const runMutation = useMutation({
     mutationFn: (jobId: string) => api.runCronJob(jobId, true, currentBotId),
     onSuccess: () => {
-      addToast({ type: 'success', message: '任务已触发执行' });
+      addToast({ type: 'success', message: t('cron.triggered') });
       queryClient.invalidateQueries({ queryKey: ['cron', currentBotId] });
       queryClient.invalidateQueries({ queryKey: ['cron-history', currentBotId] });
     },

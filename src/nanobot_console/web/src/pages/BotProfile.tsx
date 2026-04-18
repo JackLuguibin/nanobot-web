@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { Spin, Empty, Card, Select, Button, Input } from 'antd';
 import { EditOutlined, SaveOutlined, CloseOutlined } from '@ant-design/icons';
 import { Markdown } from '../components/Markdown';
@@ -31,6 +32,7 @@ const PROSE_CLASS = `
 
 export default function BotProfile() {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const { currentBotId, setCurrentBotId, addToast } = useAppStore();
   const [activeTab, setActiveTab] = useState<TabKey>('soul');
   const [editMode, setEditMode] = useState(false);
@@ -50,7 +52,7 @@ export default function BotProfile() {
     mutationFn: ({ key, content }: { key: TabKey; content: string }) =>
       api.updateBotFile(key, content, currentBotId),
     onSuccess: () => {
-      addToast({ type: 'success', message: 'File saved' });
+      addToast({ type: 'success', message: t('botProfile.saved') });
       setEditMode(false);
       queryClient.invalidateQueries({ queryKey: ['bot-files'] });
     },

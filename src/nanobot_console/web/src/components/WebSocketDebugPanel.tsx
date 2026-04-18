@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Button, Drawer, Empty, Typography } from 'antd';
 import { Trash2, Wifi } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { useAppStore } from '../store';
 
@@ -11,6 +12,7 @@ const { Text } = Typography;
  * this panel only renders it.
  */
 export default function WebSocketDebugPanel() {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const nanobotWsDebugLines = useAppStore((s) => s.nanobotWsDebugLines);
   const clearNanobotWsDebug = useAppStore((s) => s.clearNanobotWsDebug);
@@ -25,13 +27,13 @@ export default function WebSocketDebugPanel() {
       <Button
         type="text"
         size="small"
-        aria-label="Open WebSocket traffic viewer"
-        title="查看 WebSocket 实时数据"
+        aria-label={t('websocketDebug.openAria')}
+        title={t('websocketDebug.openTitle')}
         icon={<Wifi className="w-4 h-4" />}
         onClick={() => setOpen(true)}
       />
       <Drawer
-        title="WebSocket 实时数据"
+        title={t('websocketDebug.drawerTitle')}
         placement="right"
         width={480}
         open={open}
@@ -40,8 +42,7 @@ export default function WebSocketDebugPanel() {
       >
         <div className="flex flex-col gap-3">
           <Text type="secondary" className="text-xs">
-            聊天页通过 <Text code>/nanobot-ws</Text> 连接 nanobot
-            内置 WebSocket 通道时的原始帧（含 ready / delta 等）。
+            {t('websocketDebug.hint')}
           </Text>
           <div className="flex justify-end">
             <Button
@@ -50,11 +51,11 @@ export default function WebSocketDebugPanel() {
               onClick={() => clearNanobotWsDebug()}
               disabled={nanobotWsDebugLines.length === 0}
             >
-              清空
+              {t('websocketDebug.clear')}
             </Button>
           </div>
           {nanobotWsDebugLines.length === 0 ? (
-            <Empty description="尚无帧（打开 Chat 并建立会话后可见）" />
+            <Empty description={t('websocketDebug.empty')} />
           ) : (
             <div className="max-h-[calc(100vh-220px)] overflow-y-auto space-y-2 pr-1">
               {nanobotReversed.map((line, index) => (

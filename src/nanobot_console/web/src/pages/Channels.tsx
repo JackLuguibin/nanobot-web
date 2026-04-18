@@ -33,6 +33,7 @@ import {
   Grid3x3,
   type LucideIcon,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import * as api from '../api/client';
 import { useAppStore } from '../store';
 
@@ -82,6 +83,7 @@ function ChannelIcon({ name, size = 24, className }: { name: string; size?: numb
 }
 
 export default function Channels() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { addToast, currentBotId } = useAppStore();
   const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
@@ -108,7 +110,7 @@ export default function Channels() {
       return { name, success: true, message: 'Refreshed successfully' };
     },
     onSuccess: (result) => {
-      addToast({ type: 'success', message: `${result.name} refreshed successfully` });
+      addToast({ type: 'success', message: t('channels.refreshedNamed', { name: result.name }) });
       queryClient.invalidateQueries({ queryKey: ['channels'] });
     },
     onError: (error) => {
@@ -121,7 +123,7 @@ export default function Channels() {
     mutationFn: async ({ name, data }: { name: string; data: Record<string, unknown> }) =>
       api.updateChannel(name, data, currentBotId),
     onSuccess: (_, { name }) => {
-      addToast({ type: 'success', message: `Channel ${name} updated` });
+      addToast({ type: 'success', message: t('channels.updated', { name }) });
       queryClient.invalidateQueries({ queryKey: ['channels'] });
       queryClient.invalidateQueries({ queryKey: ['config'] });
       setEditModalOpen(false);
@@ -136,7 +138,7 @@ export default function Channels() {
   const deleteMutation = useMutation({
     mutationFn: (name: string) => api.deleteChannel(name, currentBotId),
     onSuccess: (_, name) => {
-      addToast({ type: 'success', message: `Channel ${name} disabled` });
+      addToast({ type: 'success', message: t('channels.disabled', { name }) });
       queryClient.invalidateQueries({ queryKey: ['channels'] });
       queryClient.invalidateQueries({ queryKey: ['config'] });
       if (selectedChannel === name) setSelectedChannel(null);

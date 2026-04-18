@@ -7,6 +7,17 @@ export default {
   darkMode: 'class',
   theme: {
     extend: {
+      padding: {
+        safe: 'max(0px, env(safe-area-inset-bottom, 0px))',
+      },
+      margin: {
+        safe: 'max(0px, env(safe-area-inset-bottom, 0px))',
+      },
+      spacing: {
+        'safe-top': 'max(0px, env(safe-area-inset-top, 0px))',
+        'safe-left': 'max(0px, env(safe-area-inset-left, 0px))',
+        'safe-right': 'max(0px, env(safe-area-inset-right, 0px))',
+      },
       colors: {
         primary: {
           50: '#eff6ff',

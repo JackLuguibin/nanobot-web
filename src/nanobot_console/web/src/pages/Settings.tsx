@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import {
   Tabs,
   Form,
@@ -92,17 +94,15 @@ function buildProvidersPayload(
       try {
         parsed = JSON.parse(trimmedJson) as unknown;
       } catch {
-        throw new Error(
-          `「${name}」的 Extra Headers 不是合法 JSON，请修正后再保存。`
-        );
+        throw new Error(i18n.t('settings.errExtraHeadersJson', { name }));
       }
       if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        throw new Error(`「${name}」的 Extra Headers 必须是 JSON 对象（键值均为字符串）。`);
+        throw new Error(i18n.t('settings.errExtraHeadersObject', { name }));
       }
       const obj = parsed as Record<string, unknown>;
       for (const [k, v] of Object.entries(obj)) {
         if (typeof v !== 'string') {
-          throw new Error(`「${name}」的 Extra Headers 中 "${k}" 的值必须是字符串。`);
+          throw new Error(i18n.t('settings.errExtraHeadersString', { name, key: k }));
         }
       }
       extraHeaders = obj as Record<string, string>;
@@ -132,6 +132,7 @@ interface FormData {
 }
 
 export default function Settings() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { theme, setTheme, addToast, currentBotId } = useAppStore();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
@@ -241,7 +242,7 @@ export default function Settings() {
       );
     },
     onSuccess: () => {
-      addToast({ type: 'success', message: 'Settings saved successfully' });
+      addToast({ type: 'success', message: t('settings.saved') });
       queryClient.invalidateQueries({ queryKey: ['config'] });
     },
     onError: (error: unknown) => {
@@ -255,7 +256,7 @@ export default function Settings() {
     onSuccess: () => {
       addToast({
         type: 'success',
-        message: 'Environment variables saved. Restart the bot for changes to take effect.',
+        message: t('settings.envSaved'),
       });
       queryClient.invalidateQueries({ queryKey: ['env'] });
     },
@@ -297,7 +298,7 @@ export default function Settings() {
     a.download = 'nanobot-config.json';
     a.click();
     URL.revokeObjectURL(url);
-    addToast({ type: 'success', message: 'Config exported successfully' });
+    addToast({ type: 'success', message: t('settings.exported') });
   };
 
   const configRaw = config as Record<string, unknown> | undefined;
@@ -316,12 +317,12 @@ export default function Settings() {
 
   const envTabContent = (
     <Card
-      title="Environment Variables"
+      title={t('settings.envTitle')}
       className="max-w-2xl shadow-sm border border-gray-200/80 dark:border-gray-700/80"
     >
       <Alert
-        title="These variables are written to .env and loaded when the bot starts."
-        description="Restart the bot after saving for changes to take effect. Values are stored as plain text."
+        title={t('settings.envAlertTitle')}
+        description={`${t('settings.envAlertDesc')} ${t('settings.envAlertDetail')}`}
         type="info"
         showIcon
         className="mb-4"
@@ -334,7 +335,7 @@ export default function Settings() {
             {envEntries.map((entry, idx) => (
               <div key={idx} className="flex gap-2 items-center">
                 <Input
-                  placeholder="KEY"
+                  placeholder={t('settings.envKeyPh')}
                   value={entry.key}
                   onChange={(e) => {
                     const next = [...envEntries];
@@ -344,7 +345,7 @@ export default function Settings() {
                   className="flex-1 font-mono"
                 />
                 <Input.Password
-                  placeholder="value"
+                  placeholder={t('settings.envValuePh')}
                   value={entry.value}
                   onChange={(e) => {
                     const next = [...envEntries];
@@ -367,7 +368,7 @@ export default function Settings() {
               icon={<PlusOutlined />}
               onClick={() => setEnvEntries([...envEntries, { key: '', value: '' }])}
             >
-              Add Variable
+              {t('settings.envAdd')}
             </Button>
             <Button
               type="primary"
@@ -375,7 +376,7 @@ export default function Settings() {
               loading={updateEnvMutation.isPending}
               onClick={handleSaveEnv}
             >
-              Save Environment
+              {t('settings.envSave')}
             </Button>
           </div>
         </>
@@ -388,25 +389,25 @@ export default function Settings() {
       key: 'general',
       label: (
         <span className="flex items-center gap-1.5">
-          <ToolOutlined /> General
+          <ToolOutlined /> {t('settings.tabGeneral')}
         </span>
       ),
       children: (
         <Card
-          title="Agent Defaults"
+          title={t('settings.agentDefaults')}
           className="shadow-sm border border-gray-200/80 dark:border-gray-700/80"
           styles={{ body: { paddingTop: 4 } }}
         >
           <Form form={form} layout="vertical" className="w-full">
             <Form.Item
-              label="Model"
+              label={t('settings.model')}
               name="model"
-              extra="Select a suggested model or type provider/model (e.g. anthropic/claude-opus-4-5)"
+              extra={t('settings.modelExtra')}
             >
               <AutoComplete
                 className="w-full"
                 size="large"
-                placeholder="e.g. anthropic/claude-opus-4-5, deepseek-v3.2"
+                placeholder={t('settings.modelPh')}
                 options={[
                   ...(status?.model ? [{ value: status.model }] : []),
                   { value: 'anthropic/claude-opus-4-5' },
@@ -422,14 +423,14 @@ export default function Settings() {
             </Form.Item>
 
             <Form.Item
-              label="Provider"
+              label={t('settings.provider')}
               name="provider"
-              extra="Select a LLM provider or leave as 'auto' for automatic detection"
+              extra={t('settings.providerExtra')}
             >
               <AutoComplete
                 className="w-full"
                 size="large"
-                placeholder="e.g. auto, anthropic, openai, deepseek"
+                placeholder={t('settings.providerPh')}
                 options={[
                   { value: 'auto' },
                   ...PROVIDER_NAMES.map((p) => ({ value: p })),
@@ -440,32 +441,32 @@ export default function Settings() {
               />
             </Form.Item>
 
-            <Form.Item label="Reasoning Effort" name="reasoning_effort">
+            <Form.Item label={t('settings.reasoningEffort')} name="reasoning_effort">
               <Radio.Group
                 buttonStyle="solid"
                 size="large"
                 className="flex w-full [&_.ant-radio-button-wrapper]:flex-1 [&_.ant-radio-button-wrapper]:text-center"
               >
-                <Radio.Button value="low">Low</Radio.Button>
-                <Radio.Button value="medium">Medium</Radio.Button>
-                <Radio.Button value="high">High</Radio.Button>
+                <Radio.Button value="low">{t('settings.reasoningLow')}</Radio.Button>
+                <Radio.Button value="medium">{t('settings.reasoningMedium')}</Radio.Button>
+                <Radio.Button value="high">{t('settings.reasoningHigh')}</Radio.Button>
               </Radio.Group>
             </Form.Item>
 
             <Form.Item
-              label="Workspace"
+              label={t('settings.workspace')}
               name="workspace"
-              extra="Directory for bot workspace files (e.g. ~/.nanobot/workspace)"
+              extra={t('settings.workspaceExtra')}
             >
-              <Input className="w-full" placeholder="~/.nanobot/workspace" size="large" />
+              <Input className="w-full" placeholder={t('settings.workspacePh')} size="large" />
             </Form.Item>
 
             <Form.Item
               label={
                 <span>
-                  Max Tokens{' '}
+                  {t('settings.maxTokens')}{' '}
                   <Text type="secondary" className="text-xs font-normal">
-                    (1 – 200000)
+                    {t('settings.maxTokensRange')}
                   </Text>
                 </span>
               }
@@ -477,9 +478,9 @@ export default function Settings() {
             <Form.Item
               label={
                 <span>
-                  Context Window Tokens{' '}
+                  {t('settings.contextWindow')}{' '}
                   <Text type="secondary" className="text-xs font-normal">
-                    (1 – 1000000)
+                    {t('settings.contextWindowRange')}
                   </Text>
                 </span>
               }
@@ -491,9 +492,9 @@ export default function Settings() {
             <Form.Item
               label={
                 <span>
-                  Max Iterations{' '}
+                  {t('settings.maxIterations')}{' '}
                   <Text type="secondary" className="text-xs font-normal">
-                    (1 – 100)
+                    {t('settings.maxIterationsRange')}
                   </Text>
                 </span>
               }
@@ -505,9 +506,9 @@ export default function Settings() {
             <Form.Item
               label={
                 <span>
-                  Temperature{' '}
+                  {t('settings.temperature')}{' '}
                   <Text type="secondary" className="text-xs font-normal">
-                    (0.0 – 2.0)
+                    {t('settings.temperatureRange')}
                   </Text>
                 </span>
               }
@@ -529,19 +530,19 @@ export default function Settings() {
       key: 'appearance',
       label: (
         <span className="flex items-center gap-1.5">
-          <SunOutlined /> Appearance
+          <SunOutlined /> {t('settings.tabAppearance')}
         </span>
       ),
       children: (
         <Card
-          title="Theme"
+          title={t('settings.themeTitle')}
           className="max-w-2xl shadow-sm border border-gray-200/80 dark:border-gray-700/80"
         >
           <div className="grid grid-cols-3 gap-4">
             {[
-              { value: 'light', Icon: Sun, label: 'Light', desc: 'Clean and bright' },
-              { value: 'dark', Icon: Moon, label: 'Dark', desc: 'Easy on the eyes' },
-              { value: 'system', Icon: Monitor, label: 'System', desc: 'Follow OS setting' },
+              { value: 'light', Icon: Sun, label: t('settings.themeLight'), desc: t('settings.themeLightDesc') },
+              { value: 'dark', Icon: Moon, label: t('settings.themeDark'), desc: t('settings.themeDarkDesc') },
+              { value: 'system', Icon: Monitor, label: t('settings.themeSystem'), desc: t('settings.themeSystemDesc') },
             ].map((option) => (
               <Card
                 key={option.value}
@@ -584,19 +585,19 @@ export default function Settings() {
       key: 'providers',
       label: (
         <span className="flex items-center gap-1.5">
-          <KeyOutlined /> Providers
+          <KeyOutlined /> {t('settings.tabProviders')}
         </span>
       ),
       children: (
         <div className="max-w-2xl space-y-4">
           <Card
-            title="API Key / API Base"
+            title={t('settings.providersCardTitle')}
             className="shadow-sm border border-gray-200/80 dark:border-gray-700/80"
             styles={{ body: { paddingTop: 0 } }}
           >
             <Alert
-              title="Sensitive"
-              description="API keys are stored in your config file. Restart the bot for provider changes to take effect."
+              title={t('settings.providersWarnTitle')}
+              description={t('settings.providersWarnDesc')}
               type="warning"
               showIcon
               className="mb-4"
@@ -611,24 +612,24 @@ export default function Settings() {
                 label: (
                   <span className="flex items-center gap-2">
                     <span className="font-medium capitalize">{name.replace(/_/g, ' ')}</span>
-                    {hasKey && <Tag color="success">Configured</Tag>}
+                    {hasKey && <Tag color="success">{t('common.configured')}</Tag>}
                   </span>
                 ),
                 children: (
                   <div className="grid grid-cols-1 gap-3 pt-1">
                     <div>
-                      <label className="block text-sm font-medium mb-1">API Key</label>
+                      <label className="block text-sm font-medium mb-1">{t('settings.apiKey')}</label>
                       <Input.Password
-                        placeholder="sk-..."
+                        placeholder={t('settings.apiKeyPh')}
                         value={entry.apiKey}
                         onChange={(e) => setProviderField(name, 'apiKey', e.target.value)}
                         className="font-mono"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">API Base (optional)</label>
+                      <label className="block text-sm font-medium mb-1">{t('settings.apiBase')}</label>
                       <Input
-                        placeholder="https://api.example.com/v1"
+                        placeholder={t('settings.apiBasePh')}
                         value={entry.apiBase}
                         onChange={(e) => setProviderField(name, 'apiBase', e.target.value)}
                         className="font-mono"
@@ -636,10 +637,10 @@ export default function Settings() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">
-                        Extra Headers (optional, JSON)
+                        {t('settings.extraHeaders')}
                       </label>
                       <Input.TextArea
-                        placeholder='{"X-Custom-Header": "value"}'
+                        placeholder={t('settings.extraHeadersPh')}
                         value={entry.extraHeadersJson}
                         onChange={(e) => setProviderField(name, 'extraHeadersJson', e.target.value)}
                         rows={2}
@@ -659,23 +660,22 @@ export default function Settings() {
       key: 'tools',
       label: (
         <span className="flex items-center gap-1.5">
-          <CodeOutlined /> Tools
+          <CodeOutlined /> {t('settings.tabTools')}
         </span>
       ),
       children: (
         <div className="max-w-2xl space-y-6">
           <Card
-            title="Tool Settings"
+            title={t('settings.toolsCardTitle')}
             className="shadow-sm border border-gray-200/80 dark:border-gray-700/80"
           >
           <Form form={form} layout="vertical">
             <div className="rounded-lg bg-gray-50 dark:bg-gray-800/50 p-4 border border-gray-100 dark:border-gray-700/50">
               <div className="flex items-center justify-between">
                 <div className="flex-1 pr-4">
-                  <p className="font-medium">Restrict to Workspace</p>
+                  <p className="font-medium">{t('settings.restrictWorkspace')}</p>
                   <Text type="secondary" className="text-sm">
-                    When enabled, all file and shell operations are restricted to the workspace
-                    directory
+                    {t('settings.restrictWorkspaceDesc')}
                   </Text>
                 </div>
                 <Form.Item name="restrict_to_workspace" valuePropName="checked" className="!mb-0">
@@ -687,7 +687,7 @@ export default function Settings() {
           </Card>
 
           <Card
-            title="Configured MCP Servers"
+            title={t('settings.mcpConfiguredTitle')}
             size="small"
             className="shadow-sm border border-gray-200/80 dark:border-gray-700/80"
           >
@@ -715,10 +715,10 @@ export default function Settings() {
               </div>
             ) : (
               <Alert
-                title="No MCP servers configured"
+                title={t('settings.mcpNoneTitle')}
                 description={
                   <span>
-                    Configure MCP servers in your config file under{' '}
+                    {t('settings.mcpNoneDesc')}{' '}
                     <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-xs font-mono">
                       tools.mcpServers
                     </code>
@@ -737,13 +737,13 @@ export default function Settings() {
       key: 'channels',
       label: (
         <span className="flex items-center gap-1.5">
-          <MobileOutlined /> Channels
+          <MobileOutlined /> {t('settings.tabChannels')}
         </span>
       ),
       children: (
         <div className="max-w-2xl space-y-6">
           <Card
-            title="Configured Channels"
+            title={t('settings.channelsConfiguredTitle')}
             className="shadow-sm border border-gray-200/80 dark:border-gray-700/80"
           >
           {channels && Object.keys(channels).length > 0 ? (
@@ -760,12 +760,12 @@ export default function Settings() {
                           <Text type="secondary" className="text-xs">
                             {Object.keys(channelConfig)
                               .filter((k) => k !== 'enabled')
-                              .join(', ') || 'Default config'}
+                              .join(', ') || t('settings.channelsDefaultConfig')}
                           </Text>
                         </div>
                       </div>
                       <Tag color={enabled ? 'success' : 'default'}>
-                        {enabled ? 'Enabled' : 'Disabled'}
+                        {enabled ? t('common.enabled') : t('common.disabled')}
                       </Tag>
                     </div>
                   </Card>
@@ -774,8 +774,8 @@ export default function Settings() {
             </div>
             ) : (
               <Alert
-                title="No channels configured"
-                description="Add channel configurations to your config file."
+                title={t('settings.channelsNoneTitle')}
+                description={t('settings.channelsNoneDesc')}
                 type="info"
                 showIcon
                 icon={<MobileOutlined />}
@@ -784,7 +784,7 @@ export default function Settings() {
           </Card>
 
           <Card
-            title="Configuration Format"
+            title={t('settings.channelsFormatTitle')}
             size="small"
             className="shadow-sm border border-gray-200/80 dark:border-gray-700/80"
           >
@@ -792,10 +792,7 @@ export default function Settings() {
             <Alert
               title={
                 <span>
-                  Configure channels in your config file at{' '}
-                  <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-xs font-mono">
-                    ~/.nanobot/config.json
-                  </code>
+                  {t('settings.channelsFormatAlert')}
                 </span>
               }
               type="info"
@@ -818,7 +815,7 @@ export default function Settings() {
       key: 'environment',
       label: (
         <span className="flex items-center gap-1.5">
-          <EnvironmentOutlined /> Environment
+          <EnvironmentOutlined /> {t('settings.tabEnvironment')}
         </span>
       ),
       children: envTabContent,
@@ -831,15 +828,15 @@ export default function Settings() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
-            Settings
+            {t('settings.title')}
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Configure your Nanobot preferences
+            {t('settings.subtitle')}
           </p>
         </div>
         <Space wrap>
           <Button icon={<DownloadOutlined />} onClick={handleExportConfig}>
-            Export
+            {t('settings.export')}
           </Button>
           <Button
             type="primary"
@@ -847,7 +844,7 @@ export default function Settings() {
             loading={saveSettingsMutation.isPending}
             onClick={handleSave}
           >
-            Save Changes
+            {t('settings.saveChanges')}
           </Button>
         </Space>
       </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Collapse, Tag, Typography, Spin, Button } from 'antd';
+import { useTranslation } from 'react-i18next';
 import {
   CheckCircleOutlined,
   LoadingOutlined,
@@ -30,6 +31,7 @@ interface SubagentPanelProps {
 }
 
 export function SubagentPanel({ tasks, collapsed = false, onCollapse }: SubagentPanelProps) {
+  const { t } = useTranslation();
   const [panelCollapsed, setPanelCollapsed] = useState(collapsed);
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
 
@@ -58,19 +60,19 @@ export function SubagentPanel({ tasks, collapsed = false, onCollapse }: Subagent
       case 'running':
         return (
           <Tag icon={<LoadingOutlined />} color="processing">
-            Running
+            {t('subagent.running')}
           </Tag>
         );
       case 'success':
         return (
           <Tag icon={<CheckCircleOutlined />} color="success">
-            Completed
+            {t('subagent.completed')}
           </Tag>
         );
       case 'error':
         return (
           <Tag icon={<CloseCircleOutlined />} color="error">
-            Failed
+            {t('subagent.failed')}
           </Tag>
         );
     }
@@ -96,23 +98,23 @@ export function SubagentPanel({ tasks, collapsed = false, onCollapse }: Subagent
       {runningCount > 0 && (
         <div className="flex items-center gap-1">
           <LoadingOutlined spin className="text-blue-400" />
-          {runningCount} 运行中
+          {t('subagent.runningCount', { count: runningCount })}
         </div>
       )}
       {successCount > 0 && (
         <div className="flex items-center gap-1">
           <CheckCircleOutlined className="text-green-400" />
-          {successCount} 成功
+          {t('subagent.successCount', { count: successCount })}
         </div>
       )}
       {errorCount > 0 && (
         <div className="flex items-center gap-1">
           <CloseCircleOutlined className="text-red-400" />
-          {errorCount} 失败
+          {t('subagent.errorCount', { count: errorCount })}
         </div>
       )}
       {runningCount === 0 && completedCount === 0 && (
-        <span className="text-gray-500">暂无任务</span>
+        <span className="text-gray-500">{t('subagent.noTasks')}</span>
       )}
     </div>
   );
@@ -123,7 +125,7 @@ export function SubagentPanel({ tasks, collapsed = false, onCollapse }: Subagent
       <div className="px-4 py-3 border-b border-gray-200/50 dark:border-gray-700/50 flex items-center justify-between">
         {!panelCollapsed && (
           <div className="flex items-center gap-2">
-            <Text strong className="text-sm">子 Agent 任务</Text>
+            <Text strong className="text-sm">{t('subagent.panelTitle')}</Text>
             {runningCount > 0 && (
               <Spin indicator={<LoadingOutlined spin />} size="small" />
             )}
@@ -147,10 +149,12 @@ export function SubagentPanel({ tasks, collapsed = false, onCollapse }: Subagent
           {/* Stats */}
           <div className="px-4 py-2 text-xs text-gray-500 flex items-center gap-2">
             {runningCount > 0 && (
-              <Tag color="processing" icon={<LoadingOutlined spin />}>{runningCount} 运行中</Tag>
+              <Tag color="processing" icon={<LoadingOutlined spin />}>
+                {t('subagent.runningCount', { count: runningCount })}
+              </Tag>
             )}
             {completedCount > 0 && (
-              <Tag color="default">{completedCount} 已完成</Tag>
+              <Tag color="default">{t('subagent.completedTag', { count: completedCount })}</Tag>
             )}
           </div>
 
@@ -196,7 +200,7 @@ export function SubagentPanel({ tasks, collapsed = false, onCollapse }: Subagent
                     {task.task && (
                       <div>
                         <Text type="secondary" className="text-xs block mb-1">
-                          任务描述
+                          {t('subagent.taskDesc')}
                         </Text>
                         <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-2 text-xs line-clamp-3">
                           <Text>{task.task}</Text>
@@ -208,7 +212,7 @@ export function SubagentPanel({ tasks, collapsed = false, onCollapse }: Subagent
                     {task.status !== 'running' && task.result && (
                       <div>
                         <Text type="secondary" className="text-xs block mb-1">
-                          执行结果
+                          {t('subagent.taskResult')}
                         </Text>
                         <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-2 text-xs max-h-60 overflow-y-auto">
                           <Markdown>{task.result}</Markdown>
@@ -220,7 +224,7 @@ export function SubagentPanel({ tasks, collapsed = false, onCollapse }: Subagent
                     {task.status === 'running' && (
                       <div className="flex items-center gap-2 text-gray-500">
                         <Spin size="small" />
-                        <Text type="secondary">等待子 agent 完成...</Text>
+                        <Text type="secondary">{t('subagent.waiting')}</Text>
                       </div>
                     )}
                   </div>

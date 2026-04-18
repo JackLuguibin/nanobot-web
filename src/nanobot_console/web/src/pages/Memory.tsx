@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { Spin, Empty, Card, Select } from 'antd';
 import { Markdown } from '../components/Markdown';
 import * as api from '../api/client';
@@ -19,13 +20,16 @@ function parseHistoryEntries(historyText: string): { timestamp?: string; content
   });
 }
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: 'long_term', label: 'Long-term Memory' },
-  { key: 'history', label: 'History Events' },
-];
-
 export default function Memory() {
+  const { t } = useTranslation();
   const { currentBotId, setCurrentBotId } = useAppStore();
+  const tabs: { key: TabKey; label: string }[] = useMemo(
+    () => [
+      { key: 'long_term', label: t('memory.tabLong') },
+      { key: 'history', label: t('memory.tabHistory') },
+    ],
+    [t],
+  );
   const [activeTab, setActiveTab] = useState<TabKey>('long_term');
 
   const { data: bots } = useQuery({
@@ -46,9 +50,9 @@ export default function Memory() {
       <div className="flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-            Memory
+            {t('memory.title')}
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Long-term memory and history events</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('memory.subtitle')}</p>
         </div>
         {bots && bots.length > 1 && (
           <Select
@@ -61,7 +65,7 @@ export default function Memory() {
       </div>
 
       <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/50 w-fit shrink-0 mt-4 mb-3">
-        {TABS.map(({ key, label }) => (
+        {tabs.map(({ key, label }) => (
           <button
             key={key}
             onClick={() => setActiveTab(key)}
@@ -84,7 +88,7 @@ export default function Memory() {
         <Empty
           description={
             <span className="text-red-500">
-              {String(error).includes('404') ? 'Workspace not found' : String(error)}
+              {String(error).includes('404') ? t('memory.workspaceNotFound') : String(error)}
             </span>
           }
         />
@@ -113,7 +117,7 @@ export default function Memory() {
             </div>
           ) : (
             <div className="flex-1 flex items-center justify-center min-h-[200px]">
-              <Empty description="No long-term memory yet" className="text-gray-500" />
+              <Empty description={t('memory.emptyLong')} className="text-gray-500" />
             </div>
           )}
         </Card>
@@ -140,7 +144,7 @@ export default function Memory() {
             ))
           ) : (
             <div className="flex items-center justify-center min-h-[200px] py-12">
-              <Empty description="No history events yet" className="text-gray-500" />
+              <Empty description={t('memory.emptyHistory')} className="text-gray-500" />
             </div>
           )}
         </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import {
   Table,
@@ -26,6 +27,7 @@ import type { SessionInfo } from '../api/types';
 const { Text } = Typography;
 
 export default function Sessions() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { addToast, currentBotId } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
@@ -40,7 +42,7 @@ export default function Sessions() {
   const deleteMutation = useMutation({
     mutationFn: (key: string) => api.deleteSession(key, currentBotId),
     onSuccess: () => {
-      addToast({ type: 'success', message: 'Session deleted successfully' });
+      addToast({ type: 'success', message: t('sessions.deleted') });
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       setSelectedRowKeys([]);
     },
@@ -52,7 +54,7 @@ export default function Sessions() {
   const createMutation = useMutation({
     mutationFn: (key?: string) => api.createSession(key, currentBotId),
     onSuccess: () => {
-      addToast({ type: 'success', message: 'New session created' });
+      addToast({ type: 'success', message: t('sessions.created') });
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
     },
     onError: (error) => {
@@ -61,7 +63,7 @@ export default function Sessions() {
   });
 
   const formatDate = (dateStr?: string) => {
-    if (!dateStr) return 'Unknown';
+    if (!dateStr) return t('common.unknown');
     const date = new Date(dateStr);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
@@ -69,10 +71,10 @@ export default function Sessions() {
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
 
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days < 7) return `${days}d ago`;
+    if (minutes < 1) return t('common.justNow');
+    if (minutes < 60) return t('common.minutesAgo', { count: minutes });
+    if (hours < 24) return t('common.hoursAgo', { count: hours });
+    if (days < 7) return t('common.daysAgo', { count: days });
     return date.toLocaleDateString();
   };
 
@@ -106,7 +108,7 @@ export default function Sessions() {
 
   const columns: ColumnsType<SessionInfo> = [
     {
-      title: 'Session',
+      title: t('sessions.colSession'),
       key: 'session',
       render: (_, session) => (
         <div>
@@ -125,7 +127,7 @@ export default function Sessions() {
       ),
     },
     {
-      title: 'Messages',
+      title: t('sessions.colMessages'),
       dataIndex: 'message_count',
       key: 'message_count',
       width: 110,
@@ -135,7 +137,7 @@ export default function Sessions() {
       sorter: (a, b) => a.message_count - b.message_count,
     },
     {
-      title: 'Last Updated',
+      title: t('sessions.colLastUpdated'),
       key: 'updated_at',
       width: 140,
       render: (_, session) => (
@@ -148,15 +150,16 @@ export default function Sessions() {
         new Date(a.updated_at || 0).getTime() - new Date(b.updated_at || 0).getTime(),
     },
     {
-      title: 'Actions',
+      title: t('sessions.colActions'),
       key: 'actions',
       width: 80,
       render: (_, session) => (
         <Popconfirm
-          title="Delete session"
-          description={`Delete "${session.title || session.key}"?`}
+          title={t('sessions.deleteTitle')}
+          description={t('sessions.deleteDesc', { name: session.title || session.key })}
           onConfirm={() => deleteMutation.mutate(session.key)}
-          okText="Delete"
+          okText={t('common.delete')}
+          cancelText={t('common.cancel')}
           okButtonProps={{ danger: true }}
         >
           <Button
@@ -172,18 +175,18 @@ export default function Sessions() {
 
   const expandedRowRender = (session: SessionInfo) => (
     <Descriptions size="small" column={4} className="px-4 py-2">
-      <Descriptions.Item label="Session Key">
+      <Descriptions.Item label={t('sessions.expandKey')}>
         <Text code className="text-xs">
           {session.key}
         </Text>
       </Descriptions.Item>
-      <Descriptions.Item label="Created">
+      <Descriptions.Item label={t('sessions.expandCreated')}>
         {session.created_at ? new Date(session.created_at).toLocaleString() : '-'}
       </Descriptions.Item>
-      <Descriptions.Item label="Last Updated">
+      <Descriptions.Item label={t('sessions.expandUpdated')}>
         {session.updated_at ? new Date(session.updated_at).toLocaleString() : '-'}
       </Descriptions.Item>
-      <Descriptions.Item label="Messages">{session.message_count}</Descriptions.Item>
+      <Descriptions.Item label={t('sessions.expandMessages')}>{session.message_count}</Descriptions.Item>
     </Descriptions>
   );
 
@@ -193,21 +196,22 @@ export default function Sessions() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-            Sessions
+            {t('sessions.title')}
           </h1>
-          <p className="text-sm text-gray-500 mt-1">Manage your conversation sessions</p>
+          <p className="text-sm text-gray-500 mt-1">{t('sessions.subtitle')}</p>
         </div>
         <Space>
           {selectedRowKeys.length > 0 && (
             <Popconfirm
-              title="Delete selected sessions"
-              description={`Delete ${selectedRowKeys.length} selected sessions?`}
+              title={t('sessions.batchTitle')}
+              description={t('sessions.batchDesc', { count: selectedRowKeys.length })}
               onConfirm={handleBatchDelete}
-              okText="Delete All"
+              okText={t('sessions.batchOk')}
+              cancelText={t('common.cancel')}
               okButtonProps={{ danger: true }}
             >
               <Button danger icon={<DeleteOutlined />}>
-                Delete ({selectedRowKeys.length})
+                {t('sessions.batchBtn', { count: selectedRowKeys.length })}
               </Button>
             </Popconfirm>
           )}
@@ -217,7 +221,7 @@ export default function Sessions() {
             loading={createMutation.isPending}
             onClick={() => createMutation.mutate(undefined)}
           >
-            New Session
+            {t('sessions.newSession')}
           </Button>
         </Space>
       </div>
@@ -225,7 +229,7 @@ export default function Sessions() {
       {/* Search & Sort */}
       <Space wrap>
         <Input.Search
-          placeholder="Search sessions..."
+          placeholder={t('sessions.searchPlaceholder')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onSearch={setSearchQuery}
@@ -237,8 +241,8 @@ export default function Sessions() {
           value={sortBy}
           onChange={(val) => setSortBy(val as typeof sortBy)}
           options={[
-            { value: 'updated', label: 'By Time', icon: <ClockCircleOutlined /> },
-            { value: 'messages', label: 'By Messages', icon: <MessageOutlined /> },
+            { value: 'updated', label: t('sessions.sortByTime'), icon: <ClockCircleOutlined /> },
+            { value: 'messages', label: t('sessions.sortByMessages'), icon: <MessageOutlined /> },
           ]}
         />
       </Space>
@@ -259,17 +263,17 @@ export default function Sessions() {
         }}
         locale={{
           emptyText: error ? (
-            <div className="text-red-500">Error loading sessions: {String(error)}</div>
+            <div className="text-red-500">{t('sessions.loadError', { error: String(error) })}</div>
           ) : (
             <Space direction="vertical" className="py-6">
               <MessageOutlined className="text-4xl text-gray-300" />
-              <span>No sessions found</span>
+              <span>{t('sessions.empty')}</span>
               <Button
                 type="link"
                 size="small"
                 onClick={() => createMutation.mutate(undefined)}
               >
-                Create a new session
+                {t('sessions.emptyCreate')}
               </Button>
             </Space>
           ),
@@ -277,7 +281,7 @@ export default function Sessions() {
         pagination={{
           pageSize: 20,
           showSizeChanger: true,
-          showTotal: (total) => `${total} sessions`,
+          showTotal: (total) => t('sessions.paginationTotal', { total }),
         }}
         size="middle"
       />
