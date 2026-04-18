@@ -250,7 +250,7 @@ export default function Layout({ children }: LayoutProps) {
       {/* Main Content */}
       <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* Global Header */}
-        <header className="shrink-0 sticky top-0 z-20 h-14 flex items-center justify-between px-4 lg:px-6 border-b border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+        <header className="shrink-0 sticky top-0 z-20 h-16 flex items-center justify-between px-4 lg:px-6 border-b border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
           <div className="flex items-center gap-3">
             <button
               type="button"
