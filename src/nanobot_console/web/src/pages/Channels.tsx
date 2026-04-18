@@ -5,7 +5,6 @@ import {
   Spin,
   Alert,
   Tag,
-  Space,
   Modal,
   Form,
   Input,
@@ -14,9 +13,6 @@ import {
 } from 'antd';
 import {
   ReloadOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  ExclamationCircleOutlined,
   InfoCircleOutlined,
   EditOutlined,
   DeleteOutlined,
@@ -31,6 +27,9 @@ import {
   Mail,
   Gamepad2,
   Grid3x3,
+  PlugZap,
+  Building2,
+  MonitorSmartphone,
   type LucideIcon,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -75,19 +74,62 @@ const CHANNEL_ICONS: Record<string, LucideIcon> = {
   qq: MessageCircle,
   matrix: Grid3x3,
   mochat: MessageCircle,
+  websocket: PlugZap,
+  weixin: MessageCircle,
+  wecom: Building2,
+  msteams: MonitorSmartphone,
 };
+
+/** Top accent strip (full color gradient) */
+const CHANNEL_TOP_BAR: Record<string, string> = {
+  telegram: 'from-sky-500 via-blue-500 to-cyan-400',
+  discord: 'from-indigo-500 via-violet-500 to-purple-500',
+  slack: 'from-amber-500 via-orange-500 to-rose-500',
+  whatsapp: 'from-emerald-500 via-green-500 to-teal-400',
+  feishu: 'from-blue-500 via-cyan-500 to-sky-400',
+  dingtalk: 'from-blue-600 via-sky-500 to-cyan-500',
+  email: 'from-slate-500 via-slate-400 to-zinc-400',
+  qq: 'from-amber-400 via-yellow-400 to-orange-400',
+  matrix: 'from-violet-600 via-purple-500 to-fuchsia-500',
+  mochat: 'from-teal-500 via-emerald-500 to-green-400',
+  websocket: 'from-amber-500 via-orange-400 to-yellow-400',
+  weixin: 'from-green-500 via-emerald-500 to-lime-400',
+  wecom: 'from-blue-600 via-blue-500 to-indigo-500',
+  msteams: 'from-violet-600 via-indigo-500 to-blue-600',
+  default: 'from-slate-400 to-slate-600',
+};
+
+/** Icon tile when channel is enabled (approximate brand colors) */
+const CHANNEL_ICON_BG: Record<string, string> = {
+  telegram: 'bg-[#229ED9] text-white shadow-sm',
+  discord: 'bg-[#5865F2] text-white shadow-sm',
+  slack: 'bg-[#4A154B] text-white shadow-sm',
+  whatsapp: 'bg-[#25D366] text-white shadow-sm',
+  feishu: 'bg-[#3370FF] text-white shadow-sm',
+  dingtalk: 'bg-[#0089FF] text-white shadow-sm',
+  email: 'bg-slate-600 text-white shadow-sm dark:bg-slate-500',
+  qq: 'bg-[#12B7F5] text-white shadow-sm',
+  matrix: 'bg-zinc-900 text-white shadow-sm dark:bg-black',
+  mochat: 'bg-teal-600 text-white shadow-sm',
+  websocket: 'bg-amber-500 text-white shadow-sm',
+  weixin: 'bg-[#07C160] text-white shadow-sm',
+  wecom: 'bg-[#0082EF] text-white shadow-sm',
+  msteams: 'bg-[#6264A7] text-white shadow-sm',
+  default: 'bg-gradient-to-br from-slate-500 to-slate-700 text-white shadow-sm',
+};
+
+const ICON_BG_DISABLED =
+  'bg-slate-200/95 text-slate-500 shadow-inner dark:bg-slate-700/90 dark:text-slate-400';
 
 function ChannelIcon({ name, size = 24, className }: { name: string; size?: number; className?: string }) {
   const Icon = CHANNEL_ICONS[name] || MessageCircle;
-  return <Icon size={size} strokeWidth={1.5} className={className} />;
+  return <Icon size={size} strokeWidth={1.75} className={className} />;
 }
 
 export default function Channels() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { addToast, currentBotId } = useAppStore();
-  const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState<string | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingChannel, setEditingChannel] = useState<string | null>(null);
   const [form] = Form.useForm();
@@ -101,22 +143,6 @@ export default function Channels() {
     queryKey: ['config', currentBotId],
     queryFn: () => api.getConfig(currentBotId),
     enabled: editModalOpen,
-  });
-
-  const refreshMutation = useMutation({
-    mutationFn: async (name: string) => {
-      setRefreshing(name);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      return { name, success: true, message: 'Refreshed successfully' };
-    },
-    onSuccess: (result) => {
-      addToast({ type: 'success', message: t('channels.refreshedNamed', { name: result.name }) });
-      queryClient.invalidateQueries({ queryKey: ['channels'] });
-    },
-    onError: (error) => {
-      addToast({ type: 'error', message: String(error) });
-    },
-    onSettled: () => setRefreshing(null),
   });
 
   const updateMutation = useMutation({
@@ -141,25 +167,11 @@ export default function Channels() {
       addToast({ type: 'success', message: t('channels.disabled', { name }) });
       queryClient.invalidateQueries({ queryKey: ['channels'] });
       queryClient.invalidateQueries({ queryKey: ['config'] });
-      if (selectedChannel === name) setSelectedChannel(null);
     },
     onError: (e) => {
       addToast({ type: 'error', message: String(e) });
     },
   });
-
-  const channelColors: Record<string, string> = {
-    telegram: 'from-sky-500/20 to-blue-500/10',
-    discord: 'from-indigo-500/20 to-purple-500/10',
-    slack: 'from-amber-500/20 to-orange-500/10',
-    whatsapp: 'from-emerald-500/20 to-green-500/10',
-    feishu: 'from-blue-500/20 to-cyan-500/10',
-    dingtalk: 'from-blue-600/20 to-indigo-500/10',
-    email: 'from-slate-500/20 to-gray-500/10',
-    qq: 'from-yellow-500/20 to-amber-500/10',
-    matrix: 'from-violet-500/20 to-purple-500/10',
-    mochat: 'from-teal-500/20 to-emerald-500/10',
-  };
 
   const channelDescriptions: Record<string, string> = {
     telegram: 'Telegram Bot API',
@@ -168,10 +180,14 @@ export default function Channels() {
     whatsapp: 'WhatsApp Business API',
     feishu: 'Feishu Open Platform',
     dingtalk: 'DingTalk Open API',
-    email: 'IMAP/SMTP Email Protocol',
+    email: 'IMAP / SMTP',
     qq: 'QQ Bot Platform',
-    matrix: 'Matrix Open Standard',
+    matrix: 'Matrix',
     mochat: 'MoChat Enterprise',
+    websocket: 'WebSocket',
+    weixin: 'Weixin Open Platform',
+    wecom: 'WeCom',
+    msteams: 'Microsoft Teams',
   };
 
   const statusColor = (status: string) => {
@@ -180,7 +196,12 @@ export default function Channels() {
     return 'default';
   };
 
-  const selectedChannelData = channels?.find((c) => c.name === selectedChannel);
+  const statusLabel = (status: string) => {
+    if (status === 'online') return t('channels.statusOnline');
+    if (status === 'offline') return t('channels.statusOffline');
+    if (status === 'error') return t('channels.statusError');
+    return status;
+  };
 
   const openEditModal = (name: string) => {
     setEditingChannel(name);
@@ -226,9 +247,6 @@ export default function Channels() {
     });
   };
 
-  const configuredChannels = channels?.filter((c) => c.enabled) ?? [];
-  const hasAnyConfigured = configuredChannels.length > 0;
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -242,7 +260,7 @@ export default function Channels() {
       <div className="p-6">
         <Alert
           type="error"
-          message="Error loading channels"
+          message={t('channels.errorLoad')}
           description={String(error)}
           showIcon
         />
@@ -253,278 +271,157 @@ export default function Channels() {
   const sortedChannels = [...(channels || [])].sort((a, b) =>
     a.enabled === b.enabled ? 0 : a.enabled ? -1 : 1
   );
+  const totalChannels = channels?.length ?? 0;
+  const enabledTotal = channels?.filter((c) => c.enabled).length ?? 0;
 
   return (
-    <div className="p-6 space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-800 via-slate-700 to-slate-600 dark:from-slate-100 dark:via-slate-200 dark:to-slate-300 bg-clip-text text-transparent">
-            Channels
+    <div className="mx-auto max-w-[1600px] space-y-8 p-6">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+            {t('channels.pageTitle')}
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Manage your communication channels
+          <p className="max-w-xl text-base text-slate-600 dark:text-slate-400">
+            {t('channels.pageSubtitle')}
           </p>
         </div>
-        <Button
-          icon={<ReloadOutlined />}
-          onClick={() => refetch()}
-          className="shadow-sm"
-        >
-          Refresh
-        </Button>
-      </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {totalChannels > 0 && (
+            <div className="rounded-full border border-slate-200/90 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-200">
+              {t('channels.summary', { enabled: enabledTotal, total: totalChannels })}
+            </div>
+          )}
+          <Button
+            type="primary"
+            icon={<ReloadOutlined />}
+            onClick={() => refetch()}
+            className="shadow-md shadow-primary-500/15"
+          >
+            {t('common.refresh')}
+          </Button>
+        </div>
+      </header>
 
-      {/* Channel Cards Grid */}
+      <Alert
+        type="info"
+        showIcon
+        icon={<InfoCircleOutlined />}
+        message={t('channels.configAlert')}
+        className="rounded-xl border-0 bg-sky-50/90 dark:bg-sky-950/35"
+      />
+
       {channels && channels.length > 0 ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {sortedChannels.map((channel) => {
-            const accent = channelColors[channel.name] || 'from-slate-500/20 to-slate-400/10';
-            const isSelected = selectedChannel === channel.name;
+            const topBar = CHANNEL_TOP_BAR[channel.name] || CHANNEL_TOP_BAR.default;
+            const iconShell = channel.enabled
+              ? CHANNEL_ICON_BG[channel.name] || CHANNEL_ICON_BG.default
+              : ICON_BG_DISABLED;
             return (
               <div
                 key={channel.name}
-                onClick={() =>
-                  setSelectedChannel(isSelected ? null : channel.name)
-                }
                 className={`
-                  relative cursor-pointer rounded-xl border-2 transition-all duration-200
-                  hover:shadow-lg hover:-translate-y-0.5
-                  ${channel.enabled ? 'bg-gradient-to-br ' + accent : 'bg-slate-50/50 dark:bg-slate-800/30'}
-                  ${isSelected ? 'border-primary-500 shadow-lg ring-2 ring-primary-500/20' : 'border-slate-200/80 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600'}
-                  ${!channel.enabled ? 'opacity-85' : ''}
+                  group relative flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm shadow-slate-900/[0.04] transition-all duration-300 dark:border-slate-700 dark:bg-slate-900/40
+                  hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-xl dark:hover:border-slate-600
+                  ${!channel.enabled ? 'opacity-[0.92]' : ''}
                 `}
               >
-                {/* Status dot */}
-                <div className="absolute top-3 right-3">
-                  <span
-                    className={`inline-block w-2 h-2 rounded-full ${
-                      channel.status === 'online'
-                        ? 'bg-emerald-500 animate-pulse'
-                        : channel.status === 'error'
-                        ? 'bg-red-500'
-                        : 'bg-slate-400 dark:bg-slate-500'
-                    }`}
-                    title={channel.status}
-                  />
-                </div>
+                <div
+                  className={`h-1 w-full bg-gradient-to-r ${channel.enabled ? topBar : 'from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700'}`}
+                />
 
-                <div className="p-4">
-                  <div className="flex items-center gap-3 mb-3">
+                <div className="flex flex-1 flex-col gap-3 p-4 pt-3">
+                  <div className="flex gap-3">
                     <div
-                      className={`flex items-center justify-center w-12 h-12 rounded-xl text-slate-600 dark:text-slate-400 ${
-                        channel.enabled
-                          ? 'bg-white/80 dark:bg-slate-800/80 shadow-sm'
-                          : 'bg-slate-200/60 dark:bg-slate-700/60'
-                      }`}
+                      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-[1.03] ${iconShell}`}
                     >
-                      <ChannelIcon name={channel.name} size={24} />
+                      <ChannelIcon name={channel.name} size={22} className={channel.enabled ? 'text-white' : undefined} />
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-slate-800 dark:text-slate-100 capitalize truncate">
+                    <div className="min-w-0 flex-1 pr-6">
+                      <h3 className="truncate text-base font-semibold capitalize tracking-tight text-slate-900 dark:text-slate-50">
                         {channel.name}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                        {channelDescriptions[channel.name] || 'Channel'}
+                      </h3>
+                      <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                        {channelDescriptions[channel.name] || t('channels.typeFallback')}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <span
-                      className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                         channel.enabled
-                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                          : 'bg-slate-200/80 dark:bg-slate-600/50 text-slate-600 dark:text-slate-400'
+                          ? 'bg-emerald-500/12 text-emerald-800 dark:text-emerald-300'
+                          : 'bg-slate-200/90 text-slate-600 dark:bg-slate-700/80 dark:text-slate-300'
                       }`}
                     >
-                      {channel.enabled ? 'Enabled' : 'Disabled'}
+                      {channel.enabled ? t('common.enabled') : t('common.disabled')}
                     </span>
-                    {channel.status !== 'offline' && (
-                      <Tag color={statusColor(channel.status)} className="text-xs m-0">
-                        {channel.status}
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`inline-block h-2 w-2 shrink-0 rounded-full ${
+                          channel.status === 'online'
+                            ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.65)]'
+                            : channel.status === 'error'
+                              ? 'bg-red-500'
+                              : 'bg-slate-400 dark:bg-slate-500'
+                        }`}
+                        title={statusLabel(channel.status)}
+                      />
+                      <Tag color={statusColor(channel.status)} className="m-0 border-0 text-xs font-medium">
+                        {statusLabel(channel.status)}
                       </Tag>
+                    </div>
+                  </div>
+
+                  <div className="mt-auto flex gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+                    <Button
+                      type="default"
+                      size="small"
+                      icon={<EditOutlined />}
+                      onClick={() => openEditModal(channel.name)}
+                      className="flex-1 font-medium"
+                    >
+                      {t('channels.edit')}
+                    </Button>
+                    {channel.enabled && (
+                      <Popconfirm
+                        title={t('channels.disableConfirmTitle')}
+                        description={t('channels.disableConfirmDesc')}
+                        onConfirm={(e) => {
+                          e?.stopPropagation();
+                          deleteMutation.mutate(channel.name);
+                        }}
+                        okText={t('channels.disable')}
+                        cancelText={t('common.cancel')}
+                      >
+                        <Button type="default" size="small" danger icon={<DeleteOutlined />} className="flex-1 font-medium">
+                          {t('channels.disable')}
+                        </Button>
+                      </Popconfirm>
                     )}
                   </div>
-
-                  {refreshing === channel.name ? (
-                    <div className="flex items-center gap-2 text-sm text-primary-600 dark:text-primary-400">
-                      <ReloadOutlined className="animate-spin" />
-                      Refreshing...
-                    </div>
-                  ) : (
-                    <div className="flex gap-2">
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<EditOutlined />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditModal(channel.name);
-                        }}
-                        className="flex-1 text-primary-600 hover:text-primary-700 dark:text-primary-400"
-                      >
-                        Edit
-                      </Button>
-                      {channel.enabled && (
-                        <Popconfirm
-                          title="Disable channel?"
-                          description="Restart the bot for changes to take effect."
-                          onConfirm={(e) => {
-                            e?.stopPropagation();
-                            deleteMutation.mutate(channel.name);
-                          }}
-                          okText="Disable"
-                          cancelText="Cancel"
-                        >
-                          <Button
-                            type="text"
-                            size="small"
-                            danger
-                            icon={<DeleteOutlined />}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            Disable
-                          </Button>
-                        </Popconfirm>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
             );
           })}
         </div>
       ) : (
-        <div className="rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/20 p-16 text-center">
-          <p className="text-4xl mb-4">📡</p>
-          <p className="text-slate-600 dark:text-slate-400 font-medium">No channels configured</p>
-          <p className="text-sm text-slate-500 dark:text-slate-500 mt-1">
-            Use Edit on a channel to configure and enable it
-          </p>
-        </div>
-      )}
-
-      {/* Channel Detail Panel */}
-      {selectedChannelData && (
-        <div
-          className={`rounded-xl border-2 overflow-hidden animate-fade-in ${
-            selectedChannelData.enabled
-              ? 'border-primary-500/30 bg-gradient-to-br ' +
-                (channelColors[selectedChannelData.name] || 'from-slate-50 to-slate-100 dark:from-slate-800/50 dark:to-slate-900/50')
-              : 'border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30'
-          }`}
-        >
-          <div className="p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-xl bg-white/80 dark:bg-slate-800/80 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-400">
-                  <ChannelIcon name={selectedChannelData.name} size={28} />
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 capitalize">
-                    {selectedChannelData.name}
-                  </h2>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    {channelDescriptions[selectedChannelData.name] || 'Channel'}
-                  </p>
-                </div>
-              </div>
-              <Space wrap>
-                <Button
-                  type="primary"
-                  icon={<EditOutlined />}
-                  onClick={() => openEditModal(selectedChannelData.name)}
-                >
-                  Edit
-                </Button>
-                {selectedChannelData.enabled && (
-                  <Popconfirm
-                    title="Disable channel?"
-                    description="Restart the bot for changes to take effect."
-                    onConfirm={() => deleteMutation.mutate(selectedChannelData.name)}
-                    okText="Disable"
-                    cancelText="Cancel"
-                  >
-                    <Button danger icon={<DeleteOutlined />}>
-                      Disable
-                    </Button>
-                  </Popconfirm>
-                )}
-                <Button
-                  icon={<ReloadOutlined className={refreshing === selectedChannelData.name ? 'animate-spin' : ''} />}
-                  loading={refreshing === selectedChannelData.name}
-                  onClick={() => refreshMutation.mutate(selectedChannelData.name)}
-                >
-                  Refresh
-                </Button>
-              </Space>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-              <div className="rounded-lg bg-white/60 dark:bg-slate-800/60 p-4 border border-slate-200/60 dark:border-slate-700/60">
-                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm mb-1">
-                  {selectedChannelData.status === 'online' ? (
-                    <CheckCircleOutlined className="text-emerald-500" />
-                  ) : selectedChannelData.status === 'error' ? (
-                    <CloseCircleOutlined className="text-red-500" />
-                  ) : (
-                    <ExclamationCircleOutlined className="text-slate-400" />
-                  )}
-                  Connection
-                </div>
-                <p className="font-medium text-slate-800 dark:text-slate-100 capitalize">
-                  {selectedChannelData.status}
-                </p>
-              </div>
-              <div className="rounded-lg bg-white/60 dark:bg-slate-800/60 p-4 border border-slate-200/60 dark:border-slate-700/60">
-                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm mb-1">
-                  {selectedChannelData.enabled ? (
-                    <CheckCircleOutlined className="text-emerald-500" />
-                  ) : (
-                    <CloseCircleOutlined className="text-slate-400" />
-                  )}
-                  Configuration
-                </div>
-                <p className="font-medium text-slate-800 dark:text-slate-100">
-                  {selectedChannelData.enabled ? 'Enabled' : 'Disabled'}
-                </p>
-              </div>
-              <div className="rounded-lg bg-white/60 dark:bg-slate-800/60 p-4 border border-slate-200/60 dark:border-slate-700/60">
-                <div className="text-slate-500 dark:text-slate-400 text-sm mb-1">Statistics</div>
-                {Object.entries(selectedChannelData.stats || {}).length > 0 ? (
-                  <div className="space-y-1">
-                    {Object.entries(selectedChannelData.stats || {}).slice(0, 3).map(([key, value]) => (
-                      <div key={key} className="flex justify-between text-sm">
-                        <span className="text-slate-500 capitalize">{key}:</span>
-                        <span className="font-medium text-slate-800 dark:text-slate-100">{String(value)}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-slate-400 dark:text-slate-500 text-sm">—</p>
-                )}
-              </div>
-            </div>
-
-            <Alert
-              message="Configuration changes are saved to config.json. Restart the bot for them to take effect."
-              type="info"
-              showIcon
-              icon={<InfoCircleOutlined />}
-              className="rounded-lg"
-            />
+        <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-gradient-to-b from-slate-50/80 to-white px-8 py-20 text-center dark:border-slate-700 dark:from-slate-900/40 dark:to-slate-900/20">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-3xl dark:bg-slate-800">
+            📡
           </div>
+          <p className="text-lg font-semibold text-slate-800 dark:text-slate-100">{t('channels.emptyTitle')}</p>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{t('channels.emptyDesc')}</p>
         </div>
       )}
 
-      {/* Edit Channel Modal */}
       <Modal
         title={
           editingChannel ? (
             <span className="flex items-center gap-2">
               <ChannelIcon name={editingChannel} size={20} className="text-slate-600 dark:text-slate-400" />
-              <span className="capitalize">Edit {editingChannel}</span>
+              <span>{t('channels.editModalTitle', { name: editingChannel })}</span>
             </span>
           ) : null
         }
@@ -536,12 +433,12 @@ export default function Channels() {
         }}
         onOk={handleEditSubmit}
         confirmLoading={updateMutation.isPending}
-        okText="Save"
+        okText={t('common.save')}
         width={520}
         destroyOnHidden
       >
         <Form form={form} layout="vertical" className="mt-4">
-          <Form.Item name="enabled" label="Enabled" valuePropName="checked">
+          <Form.Item name="enabled" label={t('channels.formEnabled')} valuePropName="checked">
             <Switch />
           </Form.Item>
           {editingChannel &&
@@ -551,8 +448,8 @@ export default function Channels() {
                   <Form.Item
                     key={field}
                     name={field}
-                    label="Allow From (comma-separated IDs)"
-                    help="Leave empty for public access"
+                    label={t('channels.formAllowFrom')}
+                    help={t('channels.formAllowFromHelp')}
                   >
                     <Input.TextArea rows={2} placeholder="user1, user2, @username" />
                   </Form.Item>
@@ -572,13 +469,6 @@ export default function Channels() {
             })}
         </Form>
       </Modal>
-
-      {/* Hint when no channel selected */}
-      {!selectedChannelData && hasAnyConfigured && (
-        <p className="text-center text-sm text-slate-500 dark:text-slate-400">
-          Click a channel card to view details · Use Edit to configure
-        </p>
-      )}
     </div>
   );
 }

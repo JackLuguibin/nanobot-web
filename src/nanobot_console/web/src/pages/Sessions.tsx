@@ -12,6 +12,8 @@ import {
   Typography,
   Tag,
   Descriptions,
+  Card,
+  Tooltip,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -25,6 +27,30 @@ import { useAppStore } from '../store';
 import type { SessionInfo } from '../api/types';
 
 const { Text } = Typography;
+
+/** Split `channel:id` session keys for compact display */
+function parseSessionChannel(key: string): { channel: string | null; idPart: string } {
+  const idx = key.indexOf(':');
+  if (idx <= 0) return { channel: null, idPart: key };
+  return { channel: key.slice(0, idx), idPart: key.slice(idx + 1) };
+}
+
+const CHANNEL_TAG_COLOR: Record<string, string> = {
+  weixin: 'green',
+  websocket: 'gold',
+  telegram: 'blue',
+  discord: 'purple',
+  slack: 'geekblue',
+  whatsapp: 'cyan',
+  feishu: 'blue',
+  dingtalk: 'processing',
+  email: 'default',
+  qq: 'cyan',
+  matrix: 'magenta',
+  mochat: 'success',
+  wecom: 'blue',
+  msteams: 'purple',
+};
 
 export default function Sessions() {
   const { t } = useTranslation();
@@ -110,39 +136,61 @@ export default function Sessions() {
     {
       title: t('sessions.colSession'),
       key: 'session',
-      render: (_, session) => (
-        <div>
-          <Link
-            to={`/chat/${session.key}`}
-            className="font-medium hover:text-blue-600"
-          >
-            {session.title || session.key}
-          </Link>
-          {session.last_message && (
-            <p className="text-xs text-gray-500 mt-0.5 truncate max-w-sm">
-              {session.last_message}
-            </p>
-          )}
-        </div>
-      ),
+      ellipsis: true,
+      render: (_, session) => {
+        const { channel, idPart } = parseSessionChannel(session.key);
+        const linkLabel = session.title || (channel ? idPart : session.key);
+        return (
+          <div className="flex min-w-0 max-w-xl flex-col gap-1.5 py-0.5">
+            <div className="flex min-w-0 items-start gap-2">
+              {channel ? (
+                <Tag
+                  color={CHANNEL_TAG_COLOR[channel] ?? 'default'}
+                  className="m-0 shrink-0 border-0 font-medium"
+                >
+                  {channel}
+                </Tag>
+              ) : null}
+              <Tooltip title={session.key}>
+                <Link
+                  to={`/chat/${encodeURIComponent(session.key)}`}
+                  className="min-w-0 font-medium text-gray-900 hover:text-blue-600 dark:text-gray-100 dark:hover:text-blue-400"
+                >
+                  <span className="block truncate">{linkLabel}</span>
+                </Link>
+              </Tooltip>
+            </div>
+            {session.last_message ? (
+              <p className="truncate pl-0.5 text-xs leading-snug text-gray-500 dark:text-gray-400">
+                {session.last_message}
+              </p>
+            ) : null}
+          </div>
+        );
+      },
     },
     {
       title: t('sessions.colMessages'),
       dataIndex: 'message_count',
       key: 'message_count',
-      width: 110,
+      width: 108,
+      align: 'center',
       render: (count: number) => (
-        <Tag icon={<MessageOutlined />}>{count}</Tag>
+        <span className="inline-flex min-w-[2.5rem] items-center justify-center rounded-md bg-gray-100 px-2 py-0.5 text-sm font-medium tabular-nums text-gray-800 dark:bg-gray-700/80 dark:text-gray-100">
+          <MessageOutlined className="mr-1 text-xs opacity-70" />
+          {count}
+        </span>
       ),
       sorter: (a, b) => a.message_count - b.message_count,
     },
     {
       title: t('sessions.colLastUpdated'),
       key: 'updated_at',
-      width: 140,
+      width: 156,
+      align: 'right',
       render: (_, session) => (
-        <span className="flex items-center gap-1 text-gray-500 text-sm">
-          <ClockCircleOutlined />
+        <span className="inline-flex items-center justify-end gap-1.5 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
+          <ClockCircleOutlined className="text-gray-400 dark:text-gray-500" />
           {formatDate(session.updated_at || session.created_at)}
         </span>
       ),
@@ -152,7 +200,9 @@ export default function Sessions() {
     {
       title: t('sessions.colActions'),
       key: 'actions',
-      width: 80,
+      width: 72,
+      align: 'center',
+      fixed: 'right',
       render: (_, session) => (
         <Popconfirm
           title={t('sessions.deleteTitle')}
@@ -162,32 +212,37 @@ export default function Sessions() {
           cancelText={t('common.cancel')}
           okButtonProps={{ danger: true }}
         >
-          <Button
-            type="text"
-            danger
-            icon={<DeleteOutlined />}
-            size="small"
-          />
+          <Tooltip title={t('common.delete')}>
+            <Button
+              type="text"
+              danger
+              icon={<DeleteOutlined />}
+              size="small"
+              className="text-gray-500 hover:text-red-500 dark:text-gray-400"
+            />
+          </Tooltip>
         </Popconfirm>
       ),
     },
   ];
 
   const expandedRowRender = (session: SessionInfo) => (
-    <Descriptions size="small" column={4} className="px-4 py-2">
-      <Descriptions.Item label={t('sessions.expandKey')}>
-        <Text code className="text-xs">
-          {session.key}
-        </Text>
-      </Descriptions.Item>
-      <Descriptions.Item label={t('sessions.expandCreated')}>
-        {session.created_at ? new Date(session.created_at).toLocaleString() : '-'}
-      </Descriptions.Item>
-      <Descriptions.Item label={t('sessions.expandUpdated')}>
-        {session.updated_at ? new Date(session.updated_at).toLocaleString() : '-'}
-      </Descriptions.Item>
-      <Descriptions.Item label={t('sessions.expandMessages')}>{session.message_count}</Descriptions.Item>
-    </Descriptions>
+    <div className="border-t border-gray-100 bg-gray-50/90 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/40">
+      <Descriptions size="small" column={{ xs: 1, sm: 2, lg: 4 }} className="mb-0">
+        <Descriptions.Item label={t('sessions.expandKey')}>
+          <Text code copyable className="text-xs">
+            {session.key}
+          </Text>
+        </Descriptions.Item>
+        <Descriptions.Item label={t('sessions.expandCreated')}>
+          {session.created_at ? new Date(session.created_at).toLocaleString() : '-'}
+        </Descriptions.Item>
+        <Descriptions.Item label={t('sessions.expandUpdated')}>
+          {session.updated_at ? new Date(session.updated_at).toLocaleString() : '-'}
+        </Descriptions.Item>
+        <Descriptions.Item label={t('sessions.expandMessages')}>{session.message_count}</Descriptions.Item>
+      </Descriptions>
+    </div>
   );
 
   return (
@@ -226,65 +281,72 @@ export default function Sessions() {
         </Space>
       </div>
 
-      {/* Search & Sort */}
-      <Space wrap>
-        <Input.Search
-          placeholder={t('sessions.searchPlaceholder')}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          onSearch={setSearchQuery}
-          allowClear
-          style={{ width: 280 }}
-        />
-        <Segmented
-          className="activity-seg-align"
-          value={sortBy}
-          onChange={(val) => setSortBy(val as typeof sortBy)}
-          options={[
-            { value: 'updated', label: t('sessions.sortByTime'), icon: <ClockCircleOutlined /> },
-            { value: 'messages', label: t('sessions.sortByMessages'), icon: <MessageOutlined /> },
-          ]}
-        />
-      </Space>
+      <Card
+        className="overflow-hidden rounded-xl border border-gray-200/90 shadow-sm dark:border-gray-700/80 dark:bg-gray-800/35"
+        styles={{ body: { padding: 0 } }}
+      >
+        <div className="flex flex-col gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-700 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <Input.Search
+            placeholder={t('sessions.searchPlaceholder')}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onSearch={setSearchQuery}
+            allowClear
+            className="max-w-full sm:max-w-[min(100%,320px)]"
+          />
+          <Segmented
+            className="activity-seg-align w-full sm:w-auto"
+            value={sortBy}
+            onChange={(val) => setSortBy(val as typeof sortBy)}
+            options={[
+              { value: 'updated', label: t('sessions.sortByTime'), icon: <ClockCircleOutlined /> },
+              { value: 'messages', label: t('sessions.sortByMessages'), icon: <MessageOutlined /> },
+            ]}
+          />
+        </div>
 
-      {/* Table */}
-      <Table<SessionInfo>
-        dataSource={processedSessions}
-        columns={columns}
-        rowKey="key"
-        loading={isLoading}
-        rowSelection={{
-          selectedRowKeys,
-          onChange: setSelectedRowKeys,
-        }}
-        expandable={{
-          expandedRowRender,
-          expandRowByClick: false,
-        }}
-        locale={{
-          emptyText: error ? (
-            <div className="text-red-500">{t('sessions.loadError', { error: String(error) })}</div>
-          ) : (
-            <Space direction="vertical" className="py-6">
-              <MessageOutlined className="text-4xl text-gray-300" />
-              <span>{t('sessions.empty')}</span>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => createMutation.mutate(undefined)}
-              >
-                {t('sessions.emptyCreate')}
-              </Button>
-            </Space>
-          ),
-        }}
-        pagination={{
-          pageSize: 20,
-          showSizeChanger: true,
-          showTotal: (total) => t('sessions.paginationTotal', { total }),
-        }}
-        size="middle"
-      />
+        <Table<SessionInfo>
+          className="sessions-page-table [&_.ant-table-thead>tr>th]:bg-gray-50/80 [&_.ant-table-thead>tr>th]:font-semibold dark:[&_.ant-table-thead>tr>th]:bg-gray-900/50"
+          dataSource={processedSessions}
+          columns={columns}
+          rowKey="key"
+          loading={isLoading}
+          rowSelection={{
+            selectedRowKeys,
+            onChange: setSelectedRowKeys,
+          }}
+          expandable={{
+            expandedRowRender,
+            expandRowByClick: false,
+          }}
+          sticky
+          scroll={{ x: 820 }}
+          locale={{
+            emptyText: error ? (
+              <div className="text-red-500">{t('sessions.loadError', { error: String(error) })}</div>
+            ) : (
+              <Space direction="vertical" className="py-8">
+                <MessageOutlined className="text-4xl text-gray-300 dark:text-gray-600" />
+                <span className="text-gray-600 dark:text-gray-400">{t('sessions.empty')}</span>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => createMutation.mutate(undefined)}
+                >
+                  {t('sessions.emptyCreate')}
+                </Button>
+              </Space>
+            ),
+          }}
+          pagination={{
+            pageSize: 20,
+            showSizeChanger: true,
+            showTotal: (total) => t('sessions.paginationTotal', { total }),
+            className: 'px-4 py-3 border-t border-gray-100 dark:border-gray-700 mb-0',
+          }}
+          size="middle"
+        />
+      </Card>
     </div>
   );
 }
