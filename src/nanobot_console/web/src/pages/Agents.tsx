@@ -472,7 +472,7 @@ export default function Agents() {
       </div>
 
       {/* Content */}
-      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
       {isLoading ? (
         <div className="flex justify-center py-12">
           <Spin size="large" />
@@ -480,14 +480,13 @@ export default function Agents() {
       ) : error ? (
         <Empty description={t('agents.loadError', { error: (error as Error).message })} className="py-12" />
       ) : filteredAgents.length === 0 ? (
-        <div className="flex min-h-[12rem] items-center justify-center">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
           <Empty
             description={
               <span className="text-gray-500 dark:text-gray-400">
                 {t('agents.emptyHint')}
               </span>
             }
-            className="py-12"
           />
         </div>
       ) : (
