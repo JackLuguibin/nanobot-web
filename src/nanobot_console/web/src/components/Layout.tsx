@@ -310,7 +310,7 @@ export default function Layout({ children }: LayoutProps) {
         </header>
 
         <div
-          className={`flex-1 min-h-0 pt-2 flex flex-col ${
+          className={`flex-1 min-h-0 flex flex-col ${
             location.pathname.startsWith('/chat') ? 'overflow-hidden' : 'overflow-y-auto'
           }`}
         >
