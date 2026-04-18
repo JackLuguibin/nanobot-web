@@ -933,6 +933,8 @@ export default function Chat() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  /** When false, new tokens must not force scroll (user scrolled up to read). */
+  const messagesStickToBottomRef = useRef(true);
   const inputRef = useRef<TextAreaRef>(null);
   const streamingContentRef = useRef("");
   /** Coalesce high-frequency chat_token updates to one setState per animation frame */
@@ -975,6 +977,7 @@ export default function Chat() {
     queuedStatusJsonRef.current = false;
     setStatusJsonLoading(false);
     expectStatusJsonTrailingChatDoneRef.current = false;
+    messagesStickToBottomRef.current = true;
   }, [activeSessionKey]);
 
   const nanobotWsBase = resolveNanobotWsBase();
@@ -1632,13 +1635,26 @@ export default function Chat() {
     );
   }, [messages]);
 
-  // 仅有一条消息时保持滚动在顶部，避免第一条用户消息被滚出视口；多条消息时滚到底部
+  const updateMessagesStickToBottomFromScroll = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const thresholdPx = 100;
+    const distFromBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight;
+    messagesStickToBottomRef.current = distFromBottom <= thresholdPx;
+  }, []);
+
+  // 仅有一条已落库消息且非流式时顶对齐，避免首条用户消息被「跟到底」滚没；流式时只有用户一条在 messages 里、助手在下方气泡，禁止每 token 执行 scrollTop=0（否则无法上下滚动）
   useEffect(() => {
     const container = messagesContainerRef.current;
     const endEl = messagesEndRef.current;
     if (!container) return;
-    if (displayMessages.length <= 1) {
+    if (displayMessages.length <= 1 && !isStreaming) {
       container.scrollTop = 0;
+      messagesStickToBottomRef.current = true;
+      return;
+    }
+    if (!messagesStickToBottomRef.current) {
       return;
     }
     // Smooth scroll on every token update queues many animations and feels sluggish
@@ -2048,6 +2064,7 @@ export default function Chat() {
     const userMessage = input.trim();
     setInput("");
     setShowSuggestions(false);
+    messagesStickToBottomRef.current = true;
 
     setMessages((prev) => [
       ...prev,
@@ -2518,6 +2535,7 @@ export default function Chat() {
           {/* Messages / Hero */}
           <div
             ref={messagesContainerRef}
+            onScroll={updateMessagesStickToBottomFromScroll}
             className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-4 md:px-6 py-2 md:py-3"
           >
             {displayMessages.length === 0 && showSuggestions ? (
