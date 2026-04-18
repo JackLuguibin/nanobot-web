@@ -196,7 +196,7 @@ export default function Activity() {
       )}
 
       {/* Activity List */}
-      <div className="flex-1 min-h-0 overflow-y-auto mt-4">
+      <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-y-auto">
         {error ? (
           <Card className="rounded-xl border border-red-200 dark:border-red-800">
             <Empty
@@ -265,7 +265,9 @@ export default function Activity() {
             />
           </Card>
         ) : (
-          <Card className="rounded-xl border border-gray-200/80 dark:border-gray-700/60">
+          <Card
+            className="flex min-h-0 flex-1 flex-col rounded-xl border border-gray-200/80 dark:border-gray-700/60 [&_.ant-card-body]:flex [&_.ant-card-body]:min-h-0 [&_.ant-card-body]:flex-1 [&_.ant-card-body]:flex-col [&_.ant-card-body]:items-center [&_.ant-card-body]:justify-center"
+          >
             <Empty description={t('activity.empty')} />
           </Card>
         )}

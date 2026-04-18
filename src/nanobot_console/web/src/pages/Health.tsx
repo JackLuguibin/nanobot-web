@@ -66,13 +66,14 @@ export default function Health() {
         <Button icon={<ReloadOutlined />} onClick={() => refetch()} />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto space-y-6">
+      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto">
       {issues.length === 0 ? (
-        <Card>
+        <Card
+          className="flex min-h-0 flex-1 flex-col [&_.ant-card-body]:flex [&_.ant-card-body]:min-h-0 [&_.ant-card-body]:flex-1 [&_.ant-card-body]:flex-col [&_.ant-card-body]:items-center [&_.ant-card-body]:justify-center"
+        >
           <Empty
             image={<CheckCircleOutlined style={{ fontSize: 64, color: '#22c55e' }} />}
             description={t('health.allGood')}
-            className="py-12"
           />
         </Card>
       ) : (
