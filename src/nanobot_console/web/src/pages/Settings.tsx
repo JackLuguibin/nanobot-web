@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
@@ -19,6 +19,7 @@ import {
   Tag,
   Alert,
   Collapse,
+  Empty,
 } from 'antd';
 import {
   SaveOutlined,
@@ -61,6 +62,38 @@ const PROVIDER_NAMES = [
   'byteplus',
   'byteplus_coding_plan',
 ] as const;
+
+/** Human-readable labels for provider keys (brands stay recognizable in any locale). */
+const PROVIDER_DISPLAY_NAMES: Partial<Record<(typeof PROVIDER_NAMES)[number], string>> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  openrouter: 'OpenRouter',
+  deepseek: 'DeepSeek',
+  ollama: 'Ollama',
+  custom: 'Custom',
+  groq: 'Groq',
+  gemini: 'Gemini',
+  azure_openai: 'Azure OpenAI',
+  vllm: 'vLLM',
+  dashscope: 'DashScope',
+  zhipu: 'Zhipu AI',
+  moonshot: 'Moonshot',
+  minimax: 'MiniMax',
+  aihubmix: 'AIHubMix',
+  siliconflow: 'SiliconFlow',
+  volcengine: 'Volcengine',
+  volcengine_coding_plan: 'Volcengine Coding Plan',
+  byteplus: 'BytePlus',
+  byteplus_coding_plan: 'BytePlus Coding Plan',
+};
+
+function providerDisplayName(name: (typeof PROVIDER_NAMES)[number]): string {
+  if (PROVIDER_DISPLAY_NAMES[name]) return PROVIDER_DISPLAY_NAMES[name]!;
+  return name
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
 
 export type ProviderFormEntry = {
   apiKey: string;
@@ -165,6 +198,16 @@ export default function Settings() {
   }, [envData]);
 
   const [providerForm, setProviderForm] = useState<Record<string, ProviderFormEntry>>({});
+  const [providerFilter, setProviderFilter] = useState('');
+  const filteredProviderNames = useMemo(() => {
+    const q = providerFilter.trim().toLowerCase();
+    if (!q) return [...PROVIDER_NAMES];
+    return PROVIDER_NAMES.filter(
+      (name) =>
+        name.toLowerCase().includes(q) || providerDisplayName(name).toLowerCase().includes(q)
+    );
+  }, [providerFilter]);
+
   useEffect(() => {
     const raw = (config as Record<string, unknown>)?.providers as Record<string, Record<string, unknown>> | undefined;
     if (!raw) {
@@ -318,7 +361,7 @@ export default function Settings() {
   const envTabContent = (
     <Card
       title={t('settings.envTitle')}
-      className="w-full shadow-sm border border-gray-200/80 dark:border-gray-700/80"
+      className="w-full rounded-xl shadow-sm border border-gray-200/80 dark:border-gray-700/80"
     >
       <Alert
         title={t('settings.envAlertTitle')}
@@ -395,7 +438,7 @@ export default function Settings() {
       children: (
         <Card
           title={t('settings.agentDefaults')}
-          className="w-full shadow-sm border border-gray-200/80 dark:border-gray-700/80"
+          className="w-full rounded-xl shadow-sm border border-gray-200/80 dark:border-gray-700/80"
           styles={{ body: { paddingTop: 4 } }}
         >
           <Form form={form} layout="vertical" className="w-full">
@@ -536,7 +579,7 @@ export default function Settings() {
       children: (
         <Card
           title={t('settings.themeTitle')}
-          className="w-full shadow-sm border border-gray-200/80 dark:border-gray-700/80"
+          className="w-full rounded-xl shadow-sm border border-gray-200/80 dark:border-gray-700/80"
         >
           <div className="grid grid-cols-3 gap-4">
             {[
@@ -548,7 +591,7 @@ export default function Settings() {
                 key={option.value}
                 hoverable
                 onClick={() => setTheme(option.value as 'light' | 'dark' | 'system')}
-                className={`cursor-pointer text-center transition-all ${
+                className={`cursor-pointer rounded-xl text-center transition-all ${
                   theme === option.value ? 'border-blue-500 border-2 shadow-md' : ''
                 }`}
               >
@@ -592,66 +635,102 @@ export default function Settings() {
         <div className="w-full min-w-0 space-y-4">
           <Card
             title={t('settings.providersCardTitle')}
-            className="w-full shadow-sm border border-gray-200/80 dark:border-gray-700/80"
-            styles={{ body: { paddingTop: 0 } }}
+            className="w-full rounded-xl shadow-sm border border-gray-200/80 dark:border-gray-700/80"
+            styles={{ body: { paddingTop: 12 } }}
+            extra={
+              <Input.Search
+                allowClear
+                placeholder={t('settings.searchProviders')}
+                value={providerFilter}
+                onChange={(e) => setProviderFilter(e.target.value)}
+                className="w-[min(100%,11rem)] sm:w-52"
+                size="middle"
+              />
+            }
           >
             <Alert
               title={t('settings.providersWarnTitle')}
               description={t('settings.providersWarnDesc')}
               type="warning"
               showIcon
-              className="mb-4"
+              className="settings-providers-alert mb-4 rounded-lg border border-amber-200/70 bg-amber-50/90 dark:border-amber-900/45 dark:bg-amber-950/30 [&_.ant-alert-description]:text-sm"
             />
-            <Collapse
-            defaultActiveKey={[]}
-            items={PROVIDER_NAMES.map((name) => {
-              const entry = providerForm[name] ?? { apiKey: '', apiBase: '', extraHeadersJson: '' };
-              const hasKey = Boolean(entry.apiKey?.trim());
-              return {
-                key: name,
-                label: (
-                  <span className="flex items-center gap-2">
-                    <span className="font-medium capitalize">{name.replace(/_/g, ' ')}</span>
-                    {hasKey && <Tag color="success">{t('common.configured')}</Tag>}
-                  </span>
-                ),
-                children: (
-                  <div className="grid grid-cols-1 gap-3 pt-1">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">{t('settings.apiKey')}</label>
-                      <Input.Password
-                        placeholder={t('settings.apiKeyPh')}
-                        value={entry.apiKey}
-                        onChange={(e) => setProviderField(name, 'apiKey', e.target.value)}
-                        className="font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">{t('settings.apiBase')}</label>
-                      <Input
-                        placeholder={t('settings.apiBasePh')}
-                        value={entry.apiBase}
-                        onChange={(e) => setProviderField(name, 'apiBase', e.target.value)}
-                        className="font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">
-                        {t('settings.extraHeaders')}
-                      </label>
-                      <Input.TextArea
-                        placeholder={t('settings.extraHeadersPh')}
-                        value={entry.extraHeadersJson}
-                        onChange={(e) => setProviderField(name, 'extraHeadersJson', e.target.value)}
-                        rows={2}
-                        className="font-mono text-sm"
-                      />
-                    </div>
-                  </div>
-                ),
-              };
-            })}
-            />
+            {filteredProviderNames.length === 0 ? (
+              <Empty className="py-6" description={t('settings.noMatchingProviders')} />
+            ) : (
+              <div className="max-h-[min(65vh,540px)] overflow-y-auto pr-0.5">
+                <Collapse
+                  defaultActiveKey={[]}
+                  expandIconPosition="end"
+                  className="settings-provider-collapse border-0 bg-transparent"
+                  items={filteredProviderNames.map((name) => {
+                    const entry = providerForm[name] ?? {
+                      apiKey: '',
+                      apiBase: '',
+                      extraHeadersJson: '',
+                    };
+                    const hasKey = Boolean(entry.apiKey?.trim());
+                    return {
+                      key: name,
+                      label: (
+                        <span className="flex min-w-0 flex-1 items-center gap-2">
+                          <span className="truncate font-medium text-gray-900 dark:text-gray-100">
+                            {providerDisplayName(name)}
+                          </span>
+                          {hasKey && (
+                            <Tag color="success" className="m-0 shrink-0">
+                              {t('common.configured')}
+                            </Tag>
+                          )}
+                        </span>
+                      ),
+                      children: (
+                        <div className="grid grid-cols-1 gap-4">
+                          <div>
+                            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                              {t('settings.apiKey')}
+                            </label>
+                            <Input.Password
+                              placeholder={t('settings.apiKeyPh')}
+                              value={entry.apiKey}
+                              onChange={(e) => setProviderField(name, 'apiKey', e.target.value)}
+                              className="font-mono"
+                              size="large"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                              {t('settings.apiBase')}
+                            </label>
+                            <Input
+                              placeholder={t('settings.apiBasePh')}
+                              value={entry.apiBase}
+                              onChange={(e) => setProviderField(name, 'apiBase', e.target.value)}
+                              className="font-mono"
+                              size="large"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                              {t('settings.extraHeaders')}
+                            </label>
+                            <Input.TextArea
+                              placeholder={t('settings.extraHeadersPh')}
+                              value={entry.extraHeadersJson}
+                              onChange={(e) =>
+                                setProviderField(name, 'extraHeadersJson', e.target.value)
+                              }
+                              rows={3}
+                              className="font-mono text-sm"
+                            />
+                          </div>
+                        </div>
+                      ),
+                    };
+                  })}
+                />
+              </div>
+            )}
           </Card>
         </div>
       ),
@@ -667,7 +746,7 @@ export default function Settings() {
         <div className="w-full min-w-0 space-y-6">
           <Card
             title={t('settings.toolsCardTitle')}
-            className="w-full shadow-sm border border-gray-200/80 dark:border-gray-700/80"
+            className="w-full rounded-xl shadow-sm border border-gray-200/80 dark:border-gray-700/80"
           >
           <Form form={form} layout="vertical">
             <div className="rounded-lg bg-gray-50 dark:bg-gray-800/50 p-4 border border-gray-100 dark:border-gray-700/50">
@@ -689,7 +768,7 @@ export default function Settings() {
           <Card
             title={t('settings.mcpConfiguredTitle')}
             size="small"
-            className="w-full shadow-sm border border-gray-200/80 dark:border-gray-700/80"
+            className="w-full rounded-xl shadow-sm border border-gray-200/80 dark:border-gray-700/80"
           >
           <div className="pt-1">
             {mcpServers && Object.keys(mcpServers).length > 0 ? (
@@ -747,7 +826,7 @@ export default function Settings() {
         <div className="w-full min-w-0 space-y-6">
           <Card
             title={t('settings.channelsConfiguredTitle')}
-            className="w-full shadow-sm border border-gray-200/80 dark:border-gray-700/80"
+            className="w-full rounded-xl shadow-sm border border-gray-200/80 dark:border-gray-700/80"
           >
           {channels && Object.keys(channels).length > 0 ? (
             <div className="space-y-3">
@@ -792,7 +871,7 @@ export default function Settings() {
           <Card
             title={t('settings.channelsFormatTitle')}
             size="small"
-            className="w-full shadow-sm border border-gray-200/80 dark:border-gray-700/80"
+            className="w-full rounded-xl shadow-sm border border-gray-200/80 dark:border-gray-700/80"
           >
           <div className="pt-1">
             <Alert
@@ -829,18 +908,18 @@ export default function Settings() {
   ];
 
   return (
-    <div className="mx-auto flex min-h-0 w-full min-w-0 max-w-4xl flex-1 flex-col gap-6 p-6">
+    <div className="mx-auto flex min-h-0 w-full min-w-0 max-w-5xl flex-1 flex-col gap-6 p-6 md:p-8">
       {/* Header */}
-      <div className="flex shrink-0 flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-4 border-b border-slate-200/90 pb-6 dark:border-slate-700/70">
+        <div className="min-w-0 space-y-0.5">
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">
             {t('settings.title')}
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             {t('settings.subtitle')}
           </p>
         </div>
-        <Space wrap>
+        <Space wrap className="shrink-0">
           <Button icon={<DownloadOutlined />} onClick={handleExportConfig}>
             {t('settings.export')}
           </Button>
@@ -859,7 +938,7 @@ export default function Settings() {
         activeKey={activeTab}
         onChange={(key) => setActiveTab(key as SettingsTab)}
         items={tabItems}
-        className="settings-tabs flex min-h-0 min-w-0 w-full flex-1 flex-col [&_.ant-slider-track]:h-2 [&_.ant-slider-rail]:h-2 [&_.ant-tabs-nav]:shrink-0 [&_.ant-tabs-content-holder]:min-h-0 [&_.ant-tabs-content-holder]:min-w-0 [&_.ant-tabs-content-holder]:w-full [&_.ant-tabs-content-holder]:flex-1 [&_.ant-tabs-content-holder]:overflow-y-auto [&_.ant-tabs-content]:w-full [&_.ant-tabs-tabpane]:min-w-0 [&_.ant-tabs-tabpane]:w-full"
+        className="settings-page-tabs settings-tabs flex min-h-0 min-w-0 w-full flex-1 flex-col [&_.ant-slider-track]:h-2 [&_.ant-slider-rail]:h-2 [&_.ant-tabs-nav]:shrink-0 [&_.ant-tabs-content-holder]:min-h-0 [&_.ant-tabs-content-holder]:min-w-0 [&_.ant-tabs-content-holder]:w-full [&_.ant-tabs-content-holder]:flex-1 [&_.ant-tabs-content-holder]:overflow-y-auto [&_.ant-tabs-content]:w-full [&_.ant-tabs-tabpane]:min-w-0 [&_.ant-tabs-tabpane]:w-full"
       />
     </div>
   );

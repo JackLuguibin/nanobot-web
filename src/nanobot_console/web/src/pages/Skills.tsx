@@ -8,7 +8,6 @@ import {
   Typography,
   Space,
   Tag,
-  Alert,
   Modal,
   Select,
   Empty,
@@ -28,6 +27,7 @@ import {
   FolderAddOutlined,
   CaretRightOutlined,
   CaretDownOutlined,
+  InfoCircleOutlined,
 } from '@ant-design/icons';
 import { Markdown } from '../components/Markdown';
 import { useTranslation } from 'react-i18next';
@@ -1263,13 +1263,13 @@ export default function Skills() {
   );
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-6 p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between shrink-0">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-4 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between shrink-0">
         <div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 via-primary-700 to-gray-700 dark:from-white dark:via-primary-300 dark:to-gray-300 bg-clip-text text-transparent">
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-gray-100">
             {t('skills.title')}
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5 hidden sm:block">
             {t('skills.subtitle')}
           </p>
         </div>
@@ -1293,21 +1293,19 @@ export default function Skills() {
         </Space>
       </div>
 
-      {/* Registry Install Section */}
-      <div className="p-5 rounded-2xl border border-gray-200/80 dark:border-gray-700/60 bg-white dark:bg-gray-800/40 shadow-sm shrink-0">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
+      {/* Registry: URL + search in one row on wide screens */}
+      <div className="p-4 rounded-xl border border-gray-200/80 dark:border-gray-700/60 bg-white dark:bg-gray-800/40 shrink-0">
+        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
           {t('skills.registryTitle')}
-        </h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          {t('skills.registryDescription')}
         </p>
-        <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_18rem] sm:items-stretch sm:gap-2">
           <Input
             placeholder={t('skills.registryUrlPlaceholder')}
             value={registryUrl}
             onChange={(e) => setRegistryUrl(e.target.value)}
-            className="w-full border-gray-300 dark:border-gray-600 hover:border-primary-400 focus:border-primary-500"
-            size="large"
+            className="min-w-0 border-gray-300 dark:border-gray-600 sm:h-full [&_.ant-input-affix-wrapper]:h-full"
+            size="middle"
+            allowClear
           />
           <Input.Search
             placeholder={t('skills.registrySearchPlaceholder')}
@@ -1317,9 +1315,17 @@ export default function Skills() {
             loading={registryLoading}
             enterButton={t('skills.search')}
             disabled={!registryUrl.trim()}
-            className="w-full [&_.ant-input-group-addon]:!min-w-[5.5rem]"
-            size="large"
+            className={`
+              min-w-0 w-full sm:h-full
+              !flex !flex-row !items-stretch
+              [&_.ant-input-affix-wrapper]:min-w-0 [&_.ant-input-affix-wrapper]:flex-1 [&_.ant-input-affix-wrapper]:h-full
+              [&_.ant-btn]:h-full [&_.ant-btn]:min-w-[4.5rem] [&_.ant-btn]:shrink-0
+            `}
+            size="middle"
+            allowClear
           />
+        </div>
+        <div className="mt-3">
           {registryUrl.trim() && (
             registrySkills.length === 0 ? (
               <div className="rounded-xl border border-dashed border-gray-200 dark:border-gray-600/80 bg-gray-50/80 dark:bg-gray-900/30 py-8 px-4">
@@ -1371,22 +1377,18 @@ export default function Skills() {
           <Empty description={t('skills.noSkills')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
         </div>
       ) : (
-        <div className="flex flex-col flex-1 min-h-0 gap-4">
-          <Alert
-            className="shrink-0 rounded-xl border-0"
-            title={t('skills.restartTitle')}
-            description={t('skills.restartDescription')}
-            type="info"
-            showIcon
-          />
-          {/* Tabs with underline indicator */}
+        <div className="flex flex-col flex-1 min-h-0 gap-3">
+          <div className="flex shrink-0 items-start gap-2 rounded-lg border border-primary-200/60 bg-primary-50/40 px-3 py-2 text-xs text-gray-600 dark:border-primary-800/50 dark:bg-primary-950/30 dark:text-gray-400">
+            <InfoCircleOutlined className="mt-0.5 shrink-0 text-primary-500 dark:text-primary-400" />
+            <span>{t('skills.restartCompact')}</span>
+          </div>
           <div className="flex border-b border-gray-200 dark:border-gray-700 mb-0 gap-0 shrink-0">
             {skillTabs.map(({ key, label }) => (
               <button
                 key={key}
                 onClick={() => setActiveTab(key)}
                 className={`
-                  relative px-6 py-3 text-sm font-medium transition-all duration-200
+                  relative px-4 py-2.5 text-sm font-medium transition-all duration-200
                   ${activeTab === key
                     ? 'text-primary-600 dark:text-primary-400'
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
@@ -1401,104 +1403,96 @@ export default function Skills() {
             ))}
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto pt-2 pb-2">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-1 pb-1">
             {activeTab === 'builtin' ? (
-              <div className="space-y-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  {t('skills.builtinHint')}
-                </p>
-                {skills.filter((s) => s.source === 'builtin').length === 0 ? (
+              skills.filter((s) => s.source === 'builtin').length === 0 ? (
+                <div className="flex min-h-0 flex-1 flex-col items-center justify-center py-6">
                   <Empty description={t('skills.emptyBuiltin')} />
-                ) : (
-                  <div className="space-y-3">
-                    {skills
-                      .filter((s) => s.source === 'builtin')
-                      .map((skill) => (
-                        <SkillItemCard key={skill.name} skill={skill} source="builtin">
-                          <Button
-                            type="text"
-                            size="middle"
-                            icon={<EditOutlined />}
-                            onClick={() => handleEditBuiltin(skill)}
-                            loading={copyToWorkspaceMutation.isPending}
-                            className="text-gray-600 dark:text-gray-400 hover:text-primary-500"
-                          >
-                            {t('skills.edit')}
-                          </Button>
-                          <Button
-                            type="text"
-                            size="middle"
-                            icon={<EyeOutlined />}
-                            onClick={async () => {
-                              const res = await api.getSkillContent(skill.name, currentBotId);
-                              setSkillViewModal({ name: res.name, content: res.content });
-                              setSkillViewMode('preview');
-                            }}
-                            className="text-gray-600 dark:text-gray-400 hover:text-primary-500"
-                          >
-                            {t('skills.view')}
-                          </Button>
-                          <Switch
-                            checked={skill.enabled}
-                            onChange={(checked) =>
-                              updateConfigMutation.mutate({
-                                section: 'skills',
-                                data: { [skill.name]: { enabled: checked } },
-                              })
-                            }
-                          />
-                        </SkillItemCard>
-                      ))}
-                  </div>
-                )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {skills
+                    .filter((s) => s.source === 'builtin')
+                    .map((skill) => (
+                      <SkillItemCard key={skill.name} skill={skill} source="builtin">
+                        <Button
+                          type="text"
+                          size="middle"
+                          icon={<EditOutlined />}
+                          onClick={() => handleEditBuiltin(skill)}
+                          loading={copyToWorkspaceMutation.isPending}
+                          className="text-gray-600 dark:text-gray-400 hover:text-primary-500"
+                        >
+                          {t('skills.edit')}
+                        </Button>
+                        <Button
+                          type="text"
+                          size="middle"
+                          icon={<EyeOutlined />}
+                          onClick={async () => {
+                            const res = await api.getSkillContent(skill.name, currentBotId);
+                            setSkillViewModal({ name: res.name, content: res.content });
+                            setSkillViewMode('preview');
+                          }}
+                          className="text-gray-600 dark:text-gray-400 hover:text-primary-500"
+                        >
+                          {t('skills.view')}
+                        </Button>
+                        <Switch
+                          checked={skill.enabled}
+                          onChange={(checked) =>
+                            updateConfigMutation.mutate({
+                              section: 'skills',
+                              data: { [skill.name]: { enabled: checked } },
+                            })
+                          }
+                        />
+                      </SkillItemCard>
+                    ))}
+                </div>
+              )
+            ) : skills.filter((s) => s.source === 'workspace').length === 0 ? (
+              <div className="flex min-h-0 flex-1 flex-col items-center justify-center py-6">
+                <Empty description={t('skills.emptyWorkspace')} />
               </div>
             ) : (
-              <div className="space-y-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  {t('skills.workspaceHint')}
-                </p>
-                {skills.filter((s) => s.source === 'workspace').length === 0 ? (
-                  <Empty description={t('skills.emptyWorkspace')} />
-                ) : (
-                  <div className="space-y-3">
-                    {skills
-                      .filter((s) => s.source === 'workspace')
-                      .map((skill) => (
-                        <SkillItemCard key={skill.name} skill={skill} source="workspace">
-                          <Button
-                            type="text"
-                            size="middle"
-                            icon={<EditOutlined />}
-                            onClick={() =>
-                              openWorkspaceSkillEdit(skill.name, skill.description || '')
-                            }
-                            className="text-gray-600 dark:text-gray-400 hover:text-primary-500"
-                          >
-                            {t('skills.edit')}
-                          </Button>
-                          <Button
-                            type="text"
-                            danger
-                            size="middle"
-                            icon={<DeleteOutlined />}
-                            onClick={() => {
-                              Modal.confirm({
-                                title: t('skills.deleteConfirmTitle', { name: skill.name }),
-                                content: t('skills.deleteConfirmContent'),
-                                okText: t('common.delete'),
-                                cancelText: t('common.cancel'),
-                                okType: 'danger',
-                                onOk: () => deleteSkillMutation.mutate(skill.name),
-                              });
-                            }}
-                            className="hover:!text-red-500"
-                          >
-                            {t('skills.delete')}
-                          </Button>
-                        </SkillItemCard>
-                      ))}
-                  </div>
-                )}
+              <div className="space-y-3">
+                {skills
+                  .filter((s) => s.source === 'workspace')
+                  .map((skill) => (
+                    <SkillItemCard key={skill.name} skill={skill} source="workspace">
+                      <Button
+                        type="text"
+                        size="middle"
+                        icon={<EditOutlined />}
+                        onClick={() =>
+                          openWorkspaceSkillEdit(skill.name, skill.description || '')
+                        }
+                        className="text-gray-600 dark:text-gray-400 hover:text-primary-500"
+                      >
+                        {t('skills.edit')}
+                      </Button>
+                      <Button
+                        type="text"
+                        danger
+                        size="middle"
+                        icon={<DeleteOutlined />}
+                        onClick={() => {
+                          Modal.confirm({
+                            title: t('skills.deleteConfirmTitle', { name: skill.name }),
+                            content: t('skills.deleteConfirmContent'),
+                            okText: t('common.delete'),
+                            cancelText: t('common.cancel'),
+                            okType: 'danger',
+                            onOk: () => deleteSkillMutation.mutate(skill.name),
+                          });
+                        }}
+                        className="hover:!text-red-500"
+                      >
+                        {t('skills.delete')}
+                      </Button>
+                    </SkillItemCard>
+                  ))}
               </div>
             )}
           </div>

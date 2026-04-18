@@ -28,7 +28,7 @@ import {
   DownloadOutlined,
   EyeInvisibleOutlined,
 } from '@ant-design/icons';
-import { Bot, Radio } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import * as api from '../api/client';
@@ -104,12 +104,6 @@ export default function Agents() {
   const { data: agents = [], isLoading, error, refetch } = useQuery({
     queryKey: ['agents', currentBotId],
     queryFn: () => api.listAgents(currentBotId!),
-    enabled: !!currentBotId,
-  });
-
-  const { data: systemStatus } = useQuery({
-    queryKey: ['agents-status', currentBotId],
-    queryFn: () => api.getAgentsSystemStatus(currentBotId!),
     enabled: !!currentBotId,
   });
 
@@ -404,15 +398,6 @@ export default function Agents() {
           </p>
         </div>
         <Space align="center" size="middle">
-          {systemStatus && (
-            <Tag 
-              icon={<Radio className="w-3 h-3" />} 
-              color={systemStatus.zmq_initialized ? 'success' : 'default'}
-              className="!m-0"
-            >
-              {t('agents.zmq')}: {systemStatus.zmq_initialized ? t('agents.zmqConnected') : t('agents.zmqDisconnected')}
-            </Tag>
-          )}
           <Button
             icon={<ReloadOutlined />}
             onClick={() => refetch()}

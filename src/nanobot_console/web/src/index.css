@@ -260,3 +260,102 @@ body {
   display: flex;
   align-items: center;
 }
+
+/* Settings: pill-style tab bar + provider accordion */
+.settings-page-tabs .ant-tabs-nav {
+  margin-bottom: 1rem !important;
+  padding: 0.25rem;
+  background: rgb(248 250 252 / 0.92);
+  border-radius: 0.75rem;
+  border: 1px solid rgb(226 232 240 / 0.85);
+}
+
+.dark .settings-page-tabs .ant-tabs-nav {
+  background: rgb(15 23 42 / 0.55);
+  border-color: rgb(51 65 85 / 0.65);
+}
+
+.settings-page-tabs .ant-tabs-nav::before {
+  border-bottom: none !important;
+}
+
+.settings-page-tabs .ant-tabs-tab {
+  margin: 0 0.125rem !important;
+  padding: 0.5rem 0.875rem !important;
+  border-radius: 0.5rem !important;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.settings-page-tabs .ant-tabs-tab-btn {
+  outline: none !important;
+}
+
+.settings-page-tabs .ant-tabs-tab:hover {
+  background: rgb(255 255 255 / 0.72);
+}
+
+.dark .settings-page-tabs .ant-tabs-tab:hover {
+  background: rgb(30 41 59 / 0.55);
+}
+
+.settings-page-tabs .ant-tabs-tab-active {
+  background: #fff !important;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+}
+
+.dark .settings-page-tabs .ant-tabs-tab-active {
+  background: rgb(30 41 59) !important;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.22);
+}
+
+.settings-page-tabs .ant-tabs-ink-bar {
+  display: none !important;
+}
+
+.settings-page-tabs .ant-tabs-tab-active .ant-tabs-tab-btn,
+.settings-page-tabs .ant-tabs-tab-active .ant-tabs-tab-btn:hover {
+  color: var(--ant-color-primary) !important;
+  font-weight: 600;
+}
+
+.settings-provider-collapse.ant-collapse {
+  background: transparent;
+}
+
+.settings-provider-collapse.ant-collapse > .ant-collapse-item {
+  border-radius: 0.75rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid rgb(226 232 240 / 0.95) !important;
+  background: rgb(255 255 255 / 0.72);
+  overflow: hidden;
+}
+
+.dark .settings-provider-collapse.ant-collapse > .ant-collapse-item {
+  border-color: rgb(51 65 85 / 0.85) !important;
+  background: rgb(15 23 42 / 0.4);
+}
+
+.settings-provider-collapse .ant-collapse-header {
+  padding: 0.875rem 1rem !important;
+  align-items: center !important;
+}
+
+.settings-provider-collapse .ant-collapse-content {
+  border-top: 1px solid rgb(241 245 249 / 0.95) !important;
+}
+
+.dark .settings-provider-collapse .ant-collapse-content {
+  border-top-color: rgb(51 65 85 / 0.75) !important;
+}
+
+.settings-provider-collapse .ant-collapse-content-box {
+  padding: 1rem !important;
+}
+
+.settings-providers-alert.ant-alert {
+  padding: 10px 12px;
+}
+
+.settings-providers-alert .ant-alert-icon {
+  font-size: 16px;
+}
