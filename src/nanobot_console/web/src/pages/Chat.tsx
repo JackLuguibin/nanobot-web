@@ -52,7 +52,7 @@ import type { TextAreaRef } from "antd/es/input/TextArea";
 import Input from "antd/es/input";
 import { SubagentPanel, type SubagentTask } from "../components/SubagentPanel";
 
-/** nanobot `/status_json` → `context` slice (silent poll after each turn). */
+/** nanobot `/status` (or legacy JSON) → `context` slice (silent poll after each turn). */
 interface NanobotContextUsage {
   tokens_estimate: number;
   window_total: number;
@@ -105,6 +105,54 @@ function extractNanobotStatusContext(
   return null;
 }
 
+/** e.g. "8k", "65k", "6744", "1.2M" */
+function parseCompactTokenCountFragment(token: string): number | null {
+  const t = token.replace(/,/g, "").trim();
+  if (!t) {
+    return null;
+  }
+  const m = t.match(/^(\d+(?:\.\d+)?)\s*([kKmM])?$/i);
+  if (!m) {
+    return null;
+  }
+  const n = Number.parseFloat(m[1]);
+  if (!Number.isFinite(n)) {
+    return null;
+  }
+  const suf = (m[2] ?? "").toLowerCase();
+  if (suf === "k") {
+    return Math.round(n * 1000);
+  }
+  if (suf === "m") {
+    return Math.round(n * 1_000_000);
+  }
+  return Math.round(n);
+}
+
+/**
+ * Plain-text `/status` body (nanobot `event: message` with `text`), e.g.
+ * `📚 Context: 8k/65k (15% of input budget)`.
+ */
+function parseNanobotStatusPlainText(raw: string): NanobotContextUsage | null {
+  const lineMatch = /Context:\s*(\S+)\s*\/\s*(\S+)\s*\(\s*(\d+(?:\.\d+)?)\s*%/i.exec(
+    raw,
+  );
+  if (!lineMatch) {
+    return null;
+  }
+  const te = parseCompactTokenCountFragment(lineMatch[1]);
+  const wt = parseCompactTokenCountFragment(lineMatch[2]);
+  const pu = Number.parseFloat(lineMatch[3]);
+  if (te === null || wt === null || !Number.isFinite(pu) || pu < 0) {
+    return null;
+  }
+  return {
+    tokens_estimate: te,
+    window_total: wt,
+    percent_used: pu,
+  };
+}
+
 function parseNanobotStatusJson(raw: string): NanobotContextUsage | null {
   const trimmed = raw.trim();
   if (!trimmed) {
@@ -143,7 +191,7 @@ function parseNanobotStatusJson(raw: string): NanobotContextUsage | null {
       continue;
     }
   }
-  return null;
+  return parseNanobotStatusPlainText(trimmed);
 }
 
 /**
@@ -892,15 +940,15 @@ export default function Chat() {
   const pendingStreamTokenDeltaRef = useRef("");
   /** 新会话首条消息：等待 nanobot 内置 websocket 通道连接后再发送 */
   const pendingNanobotOutboundRef = useRef<string | null>(null);
-  /** Silent `/status_json` poll: ignore streamed UI, parse JSON only */
+  /** Silent `/status` poll: ignore streamed UI, parse status payload only */
   const silentStatusJsonRef = useRef(false);
   const silentStatusJsonBufferRef = useRef("");
   const statusJsonInFlightRef = useRef(false);
   const queuedStatusJsonRef = useRef(false);
-  /** Incremented when `activeSessionKey` changes so stale `/status_json` replies are ignored */
+  /** Incremented when `activeSessionKey` changes so stale `/status` replies are ignored */
   const contextSessionEpochRef = useRef(0);
   const statusJsonPollEpochRef = useRef(0);
-  /** After early JSON parse from `/status_json`, ignore a following empty `chat_end` frame */
+  /** After early parse from `/status`, ignore a following empty `chat_end` frame */
   const expectStatusJsonTrailingChatDoneRef = useRef(false);
 
   /** Cancel scheduled rAF and apply any buffered tokens so state matches streamingContentRef */
@@ -1142,7 +1190,7 @@ export default function Chat() {
     setStatusJsonLoading(true);
     try {
       sendNanobotMessage({
-        content: "/status_json",
+        content: "/status",
         botId: currentBotId,
       });
     } catch {
@@ -1665,10 +1713,12 @@ export default function Chat() {
         setIsStreaming(true);
       } else if (chunk.type === "channel_notice" && chunk.content) {
         setIsStreaming(true);
-        setStreamingChannelNotices((prev) => [
-          ...prev,
-          chunk.content as string,
-        ]);
+        const noticeText = chunk.content as string;
+        const usageFromStatus = parseNanobotStatusJson(noticeText);
+        if (usageFromStatus) {
+          setNanobotContextUsage(usageFromStatus);
+        }
+        setStreamingChannelNotices((prev) => [...prev, noticeText]);
         if (
           typeof chunk.reasoning_content === "string" &&
           chunk.reasoning_content.length > 0
@@ -1984,7 +2034,7 @@ export default function Chat() {
     t,
   ]);
 
-  /** After each nanobot channel `ready` (connect or reconnect), refresh context via `/status_json`. */
+  /** After each nanobot channel `ready` (connect or reconnect), refresh context via `/status`. */
   useEffect(() => {
     if (!useNanobotChannel || !nanobotWsReady) {
       return;

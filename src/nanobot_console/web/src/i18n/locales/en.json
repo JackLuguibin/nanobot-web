@@ -70,7 +70,7 @@
     "inputPlaceholder": "Type a message…",
     "generating": "Generating…",
     "inputHint": "Enter to send · Shift+Enter for new line",
-    "contextTooltip": "Context: estimated / window · % used (refreshed via /status_json after each reply)",
+    "contextTooltip": "Context: estimated / window · % used (refreshed via /status after each reply)",
     "contextLoading": "Loading…",
     "send": "Send message",
     "stop": "Stop generating",

@@ -70,7 +70,7 @@
     "inputPlaceholder": "输入消息…",
     "generating": "正在生成…",
     "inputHint": "Enter 发送 · Shift+Enter 换行",
-    "contextTooltip": "上下文：估算用量 / 窗口 · 使用占比（每次回复后通过 /status_json 刷新）",
+    "contextTooltip": "上下文：估算用量 / 窗口 · 使用占比（每次回复后通过 /status 刷新）",
     "contextLoading": "加载中…",
     "send": "发送消息",
     "stop": "停止生成",
