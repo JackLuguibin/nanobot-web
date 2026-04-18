@@ -255,13 +255,13 @@ export default function Layout({ children }: LayoutProps) {
       {/* Main Content */}
       <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* Global Header */}
-        <header className="shrink-0 sticky top-0 z-20 h-16 flex items-center justify-between pl-14 pr-4 pt-[env(safe-area-inset-top,0px)] lg:pl-6 lg:pt-0 border-b border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+        <header className="nb-app-header shrink-0 sticky top-0 z-20 h-16 flex items-center justify-between pl-14 pr-4 pt-[env(safe-area-inset-top,0px)] lg:pl-6 lg:pt-0 border-b border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
               title={wsStatusTitle}
               onClick={() => window.location.reload()}
-              className="flex items-center gap-2 px-2 py-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              className="inline-flex h-6 items-center gap-2 rounded-md px-2 text-xs leading-none text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
             >
               <Badge
                 status={wsBadgeStatus}
@@ -304,6 +304,7 @@ export default function Layout({ children }: LayoutProps) {
           <div className="flex items-center gap-1">
             <WebSocketDebugPanel />
             <Select
+              size="small"
               value={i18n.language.startsWith('zh') ? 'zh' : 'en'}
               onChange={(lng) => void i18n.changeLanguage(lng)}
               options={[
@@ -314,6 +315,7 @@ export default function Layout({ children }: LayoutProps) {
               aria-label={t('layout.language')}
             />
             <Segmented
+              size="small"
               value={theme}
               onChange={(val) => setTheme(val as 'light' | 'dark' | 'system')}
               className="[&_.ant-segmented-item]:flex [&_.ant-segmented-item]:items-center [&_.ant-segmented-item]:justify-center [&_.ant-segmented-item-label]:flex [&_.ant-segmented-item-label]:h-full [&_.ant-segmented-item-label]:items-center [&_.ant-segmented-item-label]:justify-center"

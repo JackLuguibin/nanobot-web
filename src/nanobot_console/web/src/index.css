@@ -219,6 +219,19 @@ body {
   align-items: center;
 }
 
+/*
+ * App shell header: global Segmented is 36px for form pages; keep toolbar controls
+ * one line with antd small (24px) Select / Button.
+ */
+.nb-app-header .ant-segmented {
+  height: 24px;
+}
+
+.nb-app-header .ant-segmented-item,
+.nb-app-header .ant-segmented-item-label {
+  height: 24px;
+}
+
 /* Activity 页面 Segmented 与 Input.Search 顶部对齐（两者 top 一致） */
 .activity-seg-align {
   margin-top: -4px;
