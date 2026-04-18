@@ -233,9 +233,10 @@ export default function Layout({ children }: LayoutProps) {
         </nav>
 
         {/* Collapse Button - Desktop Only */}
-        <div className="hidden lg:block p-3 border-t border-gray-200/50 dark:border-gray-700/50">
+        <div className="hidden lg:block px-2 py-1 border-t border-gray-200/50 dark:border-gray-700/50">
           <Button
             type="text"
+            size="small"
             block
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             icon={
