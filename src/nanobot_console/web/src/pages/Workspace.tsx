@@ -126,14 +126,14 @@ export default function Workspace() {
 
   if (filesLoading && !filesData) {
     return (
-      <div className="flex items-center justify-center min-h-[320px]">
+      <div className="flex min-h-0 flex-1 items-center justify-center p-6">
         <Spin size="large" />
       </div>
     );
   }
 
   return (
-    <div className="p-6 flex flex-col flex-1 min-h-0">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col p-6">
       <div className="flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
@@ -184,7 +184,7 @@ export default function Workspace() {
         </div>
       </div>
 
-      <div className="flex flex-1 min-h-0 gap-6 mt-4">
+      <div className="mt-4 flex min-h-0 min-w-0 flex-1 gap-6">
         <Card
           title="文件列表"
           size="small"

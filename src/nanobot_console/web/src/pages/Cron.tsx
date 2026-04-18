@@ -220,7 +220,7 @@ export default function Cron() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[320px]">
+      <div className="flex min-h-0 flex-1 items-center justify-center p-6">
         <Spin size="large" />
       </div>
     );
@@ -237,9 +237,9 @@ export default function Cron() {
   const { Text } = Typography;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-6 p-6">
       {/* Header - 与 Dashboard/MCP 一致 */}
-      <div className="flex items-center justify-between">
+      <div className="flex shrink-0 items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
             定时任务
@@ -255,7 +255,7 @@ export default function Cron() {
       </div>
 
       {/* Status Card - 与 Dashboard Current Model 卡片风格一致，使用灰色/蓝色系 */}
-      <Card size="small">
+      <Card size="small" className="shrink-0">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-900/30">
@@ -297,6 +297,16 @@ export default function Cron() {
           </span>
         }
         size="small"
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+        styles={{
+          body: {
+            display: 'flex',
+            flexDirection: 'column',
+            flex: 1,
+            minHeight: 0,
+            padding: 12,
+          },
+        }}
       >
         {jobs.length === 0 ? (
           <Empty
@@ -305,6 +315,7 @@ export default function Cron() {
             className="py-12"
           />
         ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto">
           <List
             dataSource={jobs}
             renderItem={(job) => {
@@ -387,6 +398,7 @@ export default function Cron() {
               );
             }}
           />
+          </div>
         )}
       </Card>
 

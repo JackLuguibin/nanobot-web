@@ -249,7 +249,7 @@ export default function Channels() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex min-h-0 flex-1 items-center justify-center p-6">
         <Spin size="large" />
       </div>
     );
@@ -275,8 +275,8 @@ export default function Channels() {
   const enabledTotal = channels?.filter((c) => c.enabled).length ?? 0;
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-8 p-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-8 p-6">
+      <header className="flex shrink-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
             {t('channels.pageTitle')}
@@ -307,9 +307,10 @@ export default function Channels() {
         showIcon
         icon={<InfoCircleOutlined />}
         message={t('channels.configAlert')}
-        className="rounded-xl border-0 bg-sky-50/90 dark:bg-sky-950/35"
+        className="shrink-0 rounded-xl border-0 bg-sky-50/90 dark:bg-sky-950/35"
       />
 
+      <div className="min-h-0 flex-1 overflow-y-auto">
       {channels && channels.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {sortedChannels.map((channel) => {
@@ -415,6 +416,7 @@ export default function Channels() {
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{t('channels.emptyDesc')}</p>
         </div>
       )}
+      </div>
 
       <Modal
         title={

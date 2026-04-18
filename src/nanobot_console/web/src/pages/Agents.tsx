@@ -392,9 +392,9 @@ export default function Agents() {
   }
 
   return (
-    <div className="p-6 flex flex-col flex-1 min-h-0">
+    <div className="flex min-h-0 flex-1 flex-col gap-6 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between shrink-0 mb-6">
+      <div className="flex shrink-0 items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
             {t('agents.title')}
@@ -442,7 +442,7 @@ export default function Agents() {
       </div>
 
       {/* Category Filter */}
-      <div className="flex items-center gap-2.5 mb-6 flex-wrap">
+      <div className="flex shrink-0 flex-wrap items-center gap-2.5">
         {allCategoryTabs.map((cat) => (
           <button
             key={cat.key}
@@ -472,14 +472,15 @@ export default function Agents() {
       </div>
 
       {/* Content */}
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
       {isLoading ? (
-        <div className="flex justify-center py-12 shrink-0">
+        <div className="flex justify-center py-12">
           <Spin size="large" />
         </div>
       ) : error ? (
-        <Empty description={t('agents.loadError', { error: (error as Error).message })} className="py-12 shrink-0" />
+        <Empty description={t('agents.loadError', { error: (error as Error).message })} className="py-12" />
       ) : filteredAgents.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex min-h-[12rem] items-center justify-center">
           <Empty
             description={
               <span className="text-gray-500 dark:text-gray-400">
@@ -490,7 +491,7 @@ export default function Agents() {
           />
         </div>
       ) : (
-        <div className="w-full grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {filteredAgents.map((agent) => {
             const category = resolveAgentCategory(agent, categoryOverrides);
             const categoryConfig = findCategoryConfig(category, builtinCategories, customCategories);
@@ -619,6 +620,7 @@ export default function Agents() {
           })}
         </div>
       )}
+      </div>
 
       {/* Batch Actions */}
       {selectedAgents.size > 0 && (

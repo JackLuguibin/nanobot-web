@@ -35,7 +35,7 @@ export default function Health() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[320px]">
+      <div className="flex min-h-0 flex-1 items-center justify-center p-6">
         <Spin size="large" />
       </div>
     );
@@ -43,7 +43,7 @@ export default function Health() {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="flex min-h-0 flex-1 flex-col p-6">
         <Alert type="error" message={t('health.loadFailed')} description={String(error)} showIcon />
       </div>
     );
@@ -53,8 +53,8 @@ export default function Health() {
   const warningCount = issues.filter((i) => i.severity === 'warning').length;
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="flex min-h-0 flex-1 flex-col gap-6 p-6">
+      <div className="flex shrink-0 items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
             {t('health.title')}
@@ -66,6 +66,7 @@ export default function Health() {
         <Button icon={<ReloadOutlined />} onClick={() => refetch()} />
       </div>
 
+      <div className="min-h-0 flex-1 overflow-y-auto space-y-6">
       {issues.length === 0 ? (
         <Card>
           <Empty
@@ -129,6 +130,7 @@ export default function Health() {
           </Card>
         </>
       )}
+      </div>
     </div>
   );
 }

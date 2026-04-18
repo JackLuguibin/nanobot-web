@@ -113,10 +113,8 @@ export default function MCPServers() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col flex-1 min-h-0 p-6">
-        <div className="flex justify-center py-12 shrink-0">
-          <Spin size="large" />
-        </div>
+      <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+        <Spin size="large" />
       </div>
     );
   }
@@ -135,7 +133,7 @@ export default function MCPServers() {
   }
 
   return (
-    <div className="p-6 flex flex-col flex-1 min-h-0">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col p-6">
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div>

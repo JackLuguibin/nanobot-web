@@ -309,7 +309,7 @@ export default function Settings() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex min-h-0 flex-1 items-center justify-center p-6">
         <Spin size="large" />
       </div>
     );
@@ -829,9 +829,9 @@ export default function Settings() {
   ];
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-4xl space-y-6 p-6">
+    <div className="mx-auto flex min-h-0 w-full min-w-0 max-w-4xl flex-1 flex-col gap-6 p-6">
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
             {t('settings.title')}
@@ -859,7 +859,7 @@ export default function Settings() {
         activeKey={activeTab}
         onChange={(key) => setActiveTab(key as SettingsTab)}
         items={tabItems}
-        className="settings-tabs min-w-0 w-full [&_.ant-slider-track]:h-2 [&_.ant-slider-rail]:h-2 [&_.ant-tabs-content-holder]:min-w-0 [&_.ant-tabs-content-holder]:w-full [&_.ant-tabs-content]:w-full [&_.ant-tabs-tabpane]:min-w-0 [&_.ant-tabs-tabpane]:w-full"
+        className="settings-tabs flex min-h-0 min-w-0 w-full flex-1 flex-col [&_.ant-slider-track]:h-2 [&_.ant-slider-rail]:h-2 [&_.ant-tabs-nav]:shrink-0 [&_.ant-tabs-content-holder]:min-h-0 [&_.ant-tabs-content-holder]:min-w-0 [&_.ant-tabs-content-holder]:w-full [&_.ant-tabs-content-holder]:flex-1 [&_.ant-tabs-content-holder]:overflow-y-auto [&_.ant-tabs-content]:w-full [&_.ant-tabs-tabpane]:min-w-0 [&_.ant-tabs-tabpane]:w-full"
       />
     </div>
   );

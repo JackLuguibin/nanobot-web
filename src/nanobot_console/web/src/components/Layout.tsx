@@ -34,6 +34,23 @@ import {
 
 import WebSocketDebugPanel from './WebSocketDebugPanel';
 
+/** Lock main scroll; each page uses flex-1 min-h-0 and scrolls inside */
+const LOCK_PAGE_SCROLL_PATHS = new Set([
+  '/sessions',
+  '/settings',
+  '/channels',
+  '/cron',
+  '/health',
+  '/activity',
+  '/mcp',
+  '/memory',
+  '/workspace',
+  '/agents',
+  '/bot-profile',
+  '/logs',
+  '/skills',
+]);
+
 interface LayoutProps {
   children: ReactNode;
 }
@@ -331,7 +348,9 @@ export default function Layout({ children }: LayoutProps) {
 
         <div
           className={`flex-1 min-h-0 flex flex-col ${
-            location.pathname.startsWith('/chat') ? 'overflow-hidden' : 'overflow-y-auto'
+            location.pathname.startsWith('/chat') || LOCK_PAGE_SCROLL_PATHS.has(location.pathname)
+              ? 'overflow-hidden'
+              : 'overflow-y-auto'
           }`}
         >
           {children}

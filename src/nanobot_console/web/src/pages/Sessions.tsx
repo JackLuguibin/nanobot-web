@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useLayoutEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -59,6 +59,24 @@ export default function Sessions() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'messages'>('updated');
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const tableScrollBoxRef = useRef<HTMLDivElement>(null);
+  const [tableBodyScrollY, setTableBodyScrollY] = useState(360);
+
+  useLayoutEffect(() => {
+    const el = tableScrollBoxRef.current;
+    if (!el) return;
+    const TABLE_HEAD_AND_PAGER_RESERVE = 118;
+
+    const update = () => {
+      const { height } = el.getBoundingClientRect();
+      setTableBodyScrollY(Math.max(160, Math.floor(height - TABLE_HEAD_AND_PAGER_RESERVE)));
+    };
+
+    update();
+    const ro = new ResizeObserver(() => update());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const { data: sessions, isLoading, error } = useQuery({
     queryKey: ['sessions', currentBotId],
@@ -246,9 +264,9 @@ export default function Sessions() {
   );
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-6 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex shrink-0 items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
             {t('sessions.title')}
@@ -282,10 +300,10 @@ export default function Sessions() {
       </div>
 
       <Card
-        className="overflow-hidden rounded-xl border border-gray-200/90 shadow-sm dark:border-gray-700/80 dark:bg-gray-800/35"
-        styles={{ body: { padding: 0 } }}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200/90 shadow-sm dark:border-gray-700/80 dark:bg-gray-800/35"
+        styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 } }}
       >
-        <div className="flex flex-col gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-700 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex shrink-0 flex-col gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-700 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <Input.Search
             placeholder={t('sessions.searchPlaceholder')}
             value={searchQuery}
@@ -305,22 +323,22 @@ export default function Sessions() {
           />
         </div>
 
-        <Table<SessionInfo>
-          className="sessions-page-table [&_.ant-table-thead>tr>th]:bg-gray-50/80 [&_.ant-table-thead>tr>th]:font-semibold dark:[&_.ant-table-thead>tr>th]:bg-gray-900/50"
-          dataSource={processedSessions}
-          columns={columns}
-          rowKey="key"
-          loading={isLoading}
-          rowSelection={{
-            selectedRowKeys,
-            onChange: setSelectedRowKeys,
-          }}
-          expandable={{
-            expandedRowRender,
-            expandRowByClick: false,
-          }}
-          sticky
-          scroll={{ x: 820 }}
+        <div ref={tableScrollBoxRef} className="min-h-0 min-w-0 flex-1">
+          <Table<SessionInfo>
+            className="sessions-page-table [&_.ant-table-thead>tr>th]:bg-gray-50/80 [&_.ant-table-thead>tr>th]:font-semibold dark:[&_.ant-table-thead>tr>th]:bg-gray-900/50"
+            dataSource={processedSessions}
+            columns={columns}
+            rowKey="key"
+            loading={isLoading}
+            rowSelection={{
+              selectedRowKeys,
+              onChange: setSelectedRowKeys,
+            }}
+            expandable={{
+              expandedRowRender,
+              expandRowByClick: false,
+            }}
+            scroll={{ x: 820, y: tableBodyScrollY }}
           locale={{
             emptyText: error ? (
               <div className="text-red-500">{t('sessions.loadError', { error: String(error) })}</div>
@@ -338,14 +356,16 @@ export default function Sessions() {
               </Space>
             ),
           }}
-          pagination={{
-            pageSize: 20,
-            showSizeChanger: true,
-            showTotal: (total) => t('sessions.paginationTotal', { total }),
-            className: 'px-4 py-3 border-t border-gray-100 dark:border-gray-700 mb-0',
-          }}
-          size="middle"
-        />
+            pagination={{
+              pageSize: 20,
+              showSizeChanger: true,
+              showTotal: (total) => t('sessions.paginationTotal', { total }),
+              className:
+                'shrink-0 px-4 py-3 mb-0 border-t border-gray-100 dark:border-gray-700 [&_.ant-pagination]:flex-wrap',
+            }}
+            size="middle"
+          />
+        </div>
       </Card>
     </div>
   );

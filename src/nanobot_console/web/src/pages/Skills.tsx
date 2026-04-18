@@ -1263,7 +1263,7 @@ export default function Skills() {
   );
 
   return (
-    <div className="p-6 flex flex-col flex-1 min-h-0 gap-6">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-6 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between shrink-0">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 via-primary-700 to-gray-700 dark:from-white dark:via-primary-300 dark:to-gray-300 bg-clip-text text-transparent">

@@ -46,7 +46,7 @@ export default function Memory() {
   const longTermContent = memory?.long_term?.trim() ?? '';
 
   return (
-    <div className="p-6 flex flex-col flex-1 min-h-0">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col p-6">
       <div className="flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
@@ -81,7 +81,7 @@ export default function Memory() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-12 shrink-0">
+        <div className="flex min-h-0 flex-1 items-center justify-center py-12">
           <Spin />
         </div>
       ) : error ? (
