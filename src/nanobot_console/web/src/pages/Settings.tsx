@@ -318,7 +318,7 @@ export default function Settings() {
   const envTabContent = (
     <Card
       title={t('settings.envTitle')}
-      className="max-w-2xl shadow-sm border border-gray-200/80 dark:border-gray-700/80"
+      className="w-full shadow-sm border border-gray-200/80 dark:border-gray-700/80"
     >
       <Alert
         title={t('settings.envAlertTitle')}
@@ -395,7 +395,7 @@ export default function Settings() {
       children: (
         <Card
           title={t('settings.agentDefaults')}
-          className="shadow-sm border border-gray-200/80 dark:border-gray-700/80"
+          className="w-full shadow-sm border border-gray-200/80 dark:border-gray-700/80"
           styles={{ body: { paddingTop: 4 } }}
         >
           <Form form={form} layout="vertical" className="w-full">
@@ -536,7 +536,7 @@ export default function Settings() {
       children: (
         <Card
           title={t('settings.themeTitle')}
-          className="max-w-2xl shadow-sm border border-gray-200/80 dark:border-gray-700/80"
+          className="w-full shadow-sm border border-gray-200/80 dark:border-gray-700/80"
         >
           <div className="grid grid-cols-3 gap-4">
             {[
@@ -589,10 +589,10 @@ export default function Settings() {
         </span>
       ),
       children: (
-        <div className="max-w-2xl space-y-4">
+        <div className="w-full min-w-0 space-y-4">
           <Card
             title={t('settings.providersCardTitle')}
-            className="shadow-sm border border-gray-200/80 dark:border-gray-700/80"
+            className="w-full shadow-sm border border-gray-200/80 dark:border-gray-700/80"
             styles={{ body: { paddingTop: 0 } }}
           >
             <Alert
@@ -664,10 +664,10 @@ export default function Settings() {
         </span>
       ),
       children: (
-        <div className="max-w-2xl space-y-6">
+        <div className="w-full min-w-0 space-y-6">
           <Card
             title={t('settings.toolsCardTitle')}
-            className="shadow-sm border border-gray-200/80 dark:border-gray-700/80"
+            className="w-full shadow-sm border border-gray-200/80 dark:border-gray-700/80"
           >
           <Form form={form} layout="vertical">
             <div className="rounded-lg bg-gray-50 dark:bg-gray-800/50 p-4 border border-gray-100 dark:border-gray-700/50">
@@ -689,7 +689,7 @@ export default function Settings() {
           <Card
             title={t('settings.mcpConfiguredTitle')}
             size="small"
-            className="shadow-sm border border-gray-200/80 dark:border-gray-700/80"
+            className="w-full shadow-sm border border-gray-200/80 dark:border-gray-700/80"
           >
           <div className="pt-1">
             {mcpServers && Object.keys(mcpServers).length > 0 ? (
@@ -697,12 +697,15 @@ export default function Settings() {
                 {Object.entries(mcpServers).map(([name, serverConfig]) => {
                   const sc = serverConfig as Record<string, unknown>;
                   return (
-                    <Card key={name} size="small">
-                      <div className="flex items-center gap-3">
-                        <CodeOutlined className="text-gray-500" />
-                        <div>
+                    <Card key={name} size="small" className="min-w-0 w-full">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <CodeOutlined className="shrink-0 text-gray-500" />
+                        <div className="min-w-0">
                           <p className="font-medium">{name}</p>
-                          <Text type="secondary" className="text-xs font-mono">
+                          <Text
+                            type="secondary"
+                            className="break-words font-mono text-xs [overflow-wrap:anywhere]"
+                          >
                             {sc.command
                               ? `${sc.command} ${Array.isArray(sc.args) ? (sc.args as string[]).join(' ') : ''}`
                               : String(sc.url || '')}
@@ -741,30 +744,33 @@ export default function Settings() {
         </span>
       ),
       children: (
-        <div className="max-w-2xl space-y-6">
+        <div className="w-full min-w-0 space-y-6">
           <Card
             title={t('settings.channelsConfiguredTitle')}
-            className="shadow-sm border border-gray-200/80 dark:border-gray-700/80"
+            className="w-full shadow-sm border border-gray-200/80 dark:border-gray-700/80"
           >
           {channels && Object.keys(channels).length > 0 ? (
             <div className="space-y-3">
               {Object.entries(channels).map(([name, channelConfig]) => {
                 const enabled = (channelConfig as Record<string, unknown>).enabled !== false;
                 return (
-                  <Card key={name} size="small">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <MobileOutlined className="text-gray-500" />
-                        <div>
+                  <Card key={name} size="small" className="min-w-0 w-full">
+                    <div className="flex items-center justify-between gap-3 min-w-0">
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <MobileOutlined className="shrink-0 text-gray-500" />
+                        <div className="min-w-0">
                           <p className="font-medium capitalize">{name}</p>
-                          <Text type="secondary" className="text-xs">
+                          <Text
+                            type="secondary"
+                            className="text-xs break-words [overflow-wrap:anywhere]"
+                          >
                             {Object.keys(channelConfig)
                               .filter((k) => k !== 'enabled')
                               .join(', ') || t('settings.channelsDefaultConfig')}
                           </Text>
                         </div>
                       </div>
-                      <Tag color={enabled ? 'success' : 'default'}>
+                      <Tag color={enabled ? 'success' : 'default'} className="shrink-0">
                         {enabled ? t('common.enabled') : t('common.disabled')}
                       </Tag>
                     </div>
@@ -786,7 +792,7 @@ export default function Settings() {
           <Card
             title={t('settings.channelsFormatTitle')}
             size="small"
-            className="shadow-sm border border-gray-200/80 dark:border-gray-700/80"
+            className="w-full shadow-sm border border-gray-200/80 dark:border-gray-700/80"
           >
           <div className="pt-1">
             <Alert
@@ -823,7 +829,7 @@ export default function Settings() {
   ];
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
+    <div className="mx-auto w-full min-w-0 max-w-4xl space-y-6 p-6">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -853,7 +859,7 @@ export default function Settings() {
         activeKey={activeTab}
         onChange={(key) => setActiveTab(key as SettingsTab)}
         items={tabItems}
-        className="settings-tabs [&_.ant-slider-track]:h-2 [&_.ant-slider-rail]:h-2"
+        className="settings-tabs min-w-0 w-full [&_.ant-slider-track]:h-2 [&_.ant-slider-rail]:h-2 [&_.ant-tabs-content-holder]:min-w-0 [&_.ant-tabs-content-holder]:w-full [&_.ant-tabs-content]:w-full [&_.ant-tabs-tabpane]:min-w-0 [&_.ant-tabs-tabpane]:w-full"
       />
     </div>
   );
