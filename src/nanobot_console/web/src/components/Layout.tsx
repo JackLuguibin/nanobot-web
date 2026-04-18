@@ -194,7 +194,7 @@ export default function Layout({ children }: LayoutProps) {
   })), [navSections]);
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* Mobile Menu Button */}
       <button
         onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -216,7 +216,7 @@ export default function Layout({ children }: LayoutProps) {
         className={`
           ${sidebarCollapsed ? 'w-20' : 'w-64'}
           ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-          fixed lg:relative z-40 h-screen
+          fixed lg:relative z-40 min-h-screen lg:h-full lg:min-h-0
           bg-gradient-to-b from-white via-white to-gray-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900
           border-r border-gray-200/50 dark:border-gray-700/50
           flex flex-col transition-all duration-300 ease-out

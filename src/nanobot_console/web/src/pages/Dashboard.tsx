@@ -135,7 +135,7 @@ export default function Dashboard() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex min-h-0 flex-1 items-center justify-center p-6">
         <Spin size="large" />
       </div>
     );
@@ -143,7 +143,7 @@ export default function Dashboard() {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="flex min-h-0 flex-1 flex-col p-6">
         <Alert
           type="error"
           message={t('dashboard.loadError')}
@@ -155,9 +155,9 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-6 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex shrink-0 items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
             {t('dashboard.title')}
@@ -194,7 +194,7 @@ export default function Dashboard() {
 
       {/* Stat Cards：统一高度与数值区对齐；小屏 2 列、中屏 3 列、大屏 6 列，避免窄屏横向溢出 */}
       <div
-        className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 min-w-0 [&_.ant-statistic-title]:min-h-[20px] [&_.ant-statistic-title]:text-xs [&_.ant-statistic-content]:min-h-[40px] [&_.ant-statistic-content]:flex [&_.ant-statistic-content]:items-end [&_.ant-statistic-content-value]:text-lg [&_.ant-statistic-content-value]:xl:text-2xl"
+        className="grid shrink-0 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 min-w-0 [&_.ant-statistic-title]:min-h-[20px] [&_.ant-statistic-title]:text-xs [&_.ant-statistic-content]:min-h-[40px] [&_.ant-statistic-content]:flex [&_.ant-statistic-content]:items-end [&_.ant-statistic-content-value]:text-lg [&_.ant-statistic-content-value]:xl:text-2xl"
       >
         <Card hoverable className="h-full min-w-0 [&_.ant-card-body]:flex [&_.ant-card-body]:flex-col [&_.ant-card-body]:h-full [&_.ant-card-body]:min-w-0">
           <Statistic
@@ -257,7 +257,7 @@ export default function Dashboard() {
 
       {/* Model Info & Token Usage */}
       {displayStatus?.model && (
-        <Card size="small">
+        <Card size="small" className="shrink-0">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-900/30">
@@ -333,8 +333,8 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* 每日 Token 使用量 + 按模型成本分布：水平并排 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* 每日 Token 使用量 + 按模型成本分布：占满主内容区剩余高度 */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 auto-rows-fr lg:grid-cols-2 lg:grid-rows-1">
         <Card
           title={
             <span className="flex items-center gap-2">
@@ -342,13 +342,14 @@ export default function Dashboard() {
             </span>
           }
           size="small"
+          className="flex min-h-0 min-w-0 flex-col [&_.ant-card-head]:shrink-0 [&_.ant-card-body]:flex [&_.ant-card-body]:min-h-0 [&_.ant-card-body]:flex-1 [&_.ant-card-body]:flex-col"
         >
           {usageLoading ? (
-            <div className="flex items-center justify-center h-[280px]">
+            <div className="flex min-h-[240px] flex-1 items-center justify-center">
               <Spin />
             </div>
           ) : usageHistory && usageHistory.length > 0 ? (
-            <div className="h-[280px] w-full" style={{ minHeight: 240 }}>
+            <div className="flex min-h-0 w-full flex-1 flex-col" style={{ minHeight: 240 }}>
               <Column
                 data={toColumnData(usageHistory, t)}
                 xField="date"
@@ -396,9 +397,11 @@ export default function Dashboard() {
               />
             </div>
           ) : (
-            <Text type="secondary" className="block text-center py-12">
-              {t('dashboard.noUsageData')}
-            </Text>
+            <div className="flex min-h-[200px] flex-1 flex-col items-center justify-center py-8">
+              <Text type="secondary" className="text-center">
+                {t('dashboard.noUsageData')}
+              </Text>
+            </div>
           )}
         </Card>
 
@@ -409,9 +412,10 @@ export default function Dashboard() {
             </span>
           }
           size="small"
+          className="flex min-h-0 min-w-0 flex-col [&_.ant-card-head]:shrink-0 [&_.ant-card-body]:flex [&_.ant-card-body]:min-h-0 [&_.ant-card-body]:flex-1 [&_.ant-card-body]:flex-col"
         >
-          <div className="flex flex-col items-center gap-4 w-full">
-            <div style={{ width: 180, height: 180 }}>
+          <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-4">
+            <div className="flex shrink-0 items-center justify-center" style={{ width: 180, height: 180 }}>
               <Pie
                 data={Object.entries(displayStatus?.token_usage?.by_model ?? {})
                   .filter(([, v]) => (v.total_tokens ?? 0) > 0)
